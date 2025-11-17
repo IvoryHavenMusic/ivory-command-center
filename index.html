@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ivory Mission Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #050816;
+      color: #f9fafb;
+      margin: 0;
+      padding: 16px;
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 1.6rem;
+    }
+
+    .card {
+      background: #111827;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 0.85rem;
+      color: #9ca3af;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      margin-bottom: 10px;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      background: #22c55e;
+      color: #022c22;
+      font-weight: 600;
+    }
+
+    button.secondary {
+      background: #0ea5e9;
+      color: #022c3a;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    .songs-list {
+      margin-top: 8px;
+    }
+
+    .song-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: #020617;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+    }
+
+    .song-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .song-label {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .status {
+      font-size: 0.8rem;
+      margin-top: 6px;
+      min-height: 1.2em;
+      color: #a5b4fc;
+    }
+  </style>
+
+  <!-- Supabase JS (browser) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h1>Ivory Mission Control 🛰️</h1>
+  <p style="color:#9ca3af; font-size:0.9rem;">
+    Quick control panel for <strong>Ivory Haven</strong> &amp; <strong>Ivory Ocean</strong> releases.
+  </p>
+
+  <div class="card">
+    <h2>Add / schedule a song</h2>
+    <label for="title">Song title</label>
+    <input id="title" type="text" placeholder="Tropical Orbit, Hearts Alight, …" />
+
+    <label for="label">Label</label>
+    <select id="label">
+      <option value="Ivory Ocean">Ivory Ocean</option>
+      <option value="Ivory Haven">Ivory Haven</option>
+    </select>
+
+    <!-- you can extend with release_date, status, etc. later -->
+
+    <button id="addSongBtn">Add to tracker</button>
+    <div class="status" id="addStatus"></div>
+  </div>
+
+  <div class="card">
+    <h2>Tracked songs</h2>
+    <button class="secondary" id="refreshBtn">Refresh list</button>
+    <div class="status" id="listStatus"></div>
+    <div class="songs-list" id="songsList"></div>
+  </div>
+
+  <script>
+    // 🔧 1) FILL THESE IN FROM SUPABASE DASHBOARD
+    const SUPABASE_URL = "https://YOUR-PROJECT-URL.supabase.co";
+    const SUPABASE_ANON_KEY = "YOUR_PUBLIC_ANON_KEY";
+
+    const { createClient } = window.supabase;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const titleInput = document.getElementById("title");
+    const labelSelect = document.getElementById("label");
+    const addSongBtn = document.getElementById("addSongBtn");
+    const addStatus = document.getElementById("addStatus");
+    const listStatus = document.getElementById("listStatus");
+    const songsList = document.getElementById("songsList");
+    const refreshBtn = document.getElementById("refreshBtn");
+
+    async function loadSongs() {
+      listStatus.textContent = "Loading songs…";
+      songsList.innerHTML = "";
+      const { data, error } = await supabase
+        .from("music_tracker")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error(error);
+        listStatus.textContent = "Error loading songs: " + error.message;
+        return;
+      }
+
+      listStatus.textContent = `Loaded ${data.length} song(s).`;
+
+      data.forEach(row => {
+        const div = document.createElement("div");
+        div.className = "song-row";
+
+        const meta = document.createElement("div");
+        meta.className = "song-meta";
+
+        const title = document.createElement("div");
+        title.textContent = row.song_title;
+
+        const label = document.createElement("div");
+        label.className = "song-label";
+        label.textContent = row.label || "";
+
+        meta.appendChild(title);
+        meta.appendChild(label);
+
+        const logBtn = document.createElement("button");
+        logBtn.textContent = "Log play";
+        logBtn.onclick = () => logPlay(row.song_title, row.label);
+
+        div.appendChild(meta);
+        div.appendChild(logBtn);
+
+        songsList.appendChild(div);
+      });
+    }
+
+    async function addSong() {
+      const song_title = titleInput.value.trim();
+      const label = labelSelect.value;
+
+      if (!song_title) {
+        addStatus.textContent = "Please enter a song title.";
+        return;
+      }
+
+      addSongBtn.disabled = true;
+      addStatus.textContent = "Saving…";
+
+      const { error } = await supabase
+        .from("music_tracker")
+        .insert({ song_title, label });
+
+      addSongBtn.disabled = false;
+
+      if (error) {
+        console.error(error);
+        addStatus.textContent = "Error: " + error.message;
+        return;
+      }
+
+      addStatus.textContent = "Saved ✔";
+      titleInput.value = "";
+      await loadSongs();
+    }
+
+    async function logPlay(song_title, label) {
+      listStatus.textContent = `Logging play for "${song_title}"…`;
+
+      const { error } = await supabase
+        .from("play_logs")
+        .insert({ song_title, label });
+
+      if (error) {
+        console.error(error);
+        listStatus.textContent = "Error logging play: " + error.message;
+        return;
+      }
+
+      listStatus.textContent = `Logged play for "${song_title}".`;
+    }
+
+    addSongBtn.addEventListener("click", addSong);
+    refreshBtn.addEventListener("click", loadSongs);
+
+    // Initial load
+    loadSongs();
+  </script>
+</body>
+</html>
