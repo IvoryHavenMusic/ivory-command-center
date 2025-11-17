@@ -2,246 +2,168 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ivory Mission Control</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <style>
     body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #050816;
-      color: #f9fafb;
+      background: #0a0a0a;
+      color: #f0f0f0;
+      font-family: Arial, Helvetica, sans-serif;
       margin: 0;
-      padding: 16px;
+      padding: 0;
     }
 
-    h1 {
-      margin-top: 0;
-      font-size: 1.6rem;
+    header {
+      background: linear-gradient(90deg, #00aaff, #0066ff);
+      padding: 20px;
+      text-align: center;
+      font-size: 1.7rem;
+      font-weight: bold;
+      color: white;
+      letter-spacing: 1px;
     }
 
-    .card {
-      background: #111827;
+    .container {
+      max-width: 700px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #111;
       border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 16px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      border: 1px solid #222;
     }
 
     label {
       display: block;
-      margin-bottom: 4px;
-      font-size: 0.85rem;
-      color: #9ca3af;
+      margin-top: 15px;
+      font-weight: bold;
     }
 
-    input, select {
+    input {
       width: 100%;
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid #374151;
-      background: #020617;
-      color: #e5e7eb;
-      margin-bottom: 10px;
+      padding: 10px;
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 6px;
+      margin-top: 5px;
+      color: #fff;
+      font-size: 1rem;
     }
 
     button {
+      margin-top: 20px;
+      padding: 12px 20px;
+      background: #007bff;
       border: none;
-      border-radius: 999px;
-      padding: 8px 16px;
-      font-size: 0.9rem;
+      border-radius: 6px;
+      color: white;
       cursor: pointer;
-      background: #22c55e;
-      color: #022c22;
-      font-weight: 600;
+      font-size: 1rem;
     }
 
-    button.secondary {
-      background: #0ea5e9;
-      color: #022c3a;
+    button:hover {
+      background: #3399ff;
     }
 
-    button:disabled {
-      opacity: 0.6;
-      cursor: default;
+    table {
+      width: 100%;
+      margin-top: 30px;
+      border-collapse: collapse;
     }
 
-    .songs-list {
-      margin-top: 8px;
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #333;
     }
 
-    .song-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 10px;
-      border-radius: 8px;
-      background: #020617;
-      margin-bottom: 6px;
-      font-size: 0.9rem;
+    th {
+      text-align: left;
+      background: #1a1a1a;
     }
 
-    .song-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+    .log-btn {
+      background: #ff8800;
     }
-
-    .song-label {
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    .status {
-      font-size: 0.8rem;
-      margin-top: 6px;
-      min-height: 1.2em;
-      color: #a5b4fc;
+    .log-btn:hover {
+      background: #ffaa33;
     }
   </style>
-
-  <!-- Supabase JS (browser) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
-  <h1>Ivory Mission Control 🛰️</h1>
-  <p style="color:#9ca3af; font-size:0.9rem;">
-    Quick control panel for <strong>Ivory Haven</strong> &amp; <strong>Ivory Ocean</strong> releases.
-  </p>
+<header>
+  Ivory Mission Control
+</header>
 
-  <div class="card">
-    <h2>Add / schedule a song</h2>
-    <label for="title">Song title</label>
-    <input id="title" type="text" placeholder="Tropical Orbit, Hearts Alight, …" />
+<div class="container">
+  <h2>Add New Song</h2>
 
-    <label for="label">Label</label>
-    <select id="label">
-      <option value="Ivory Ocean">Ivory Ocean</option>
-      <option value="Ivory Haven">Ivory Haven</option>
-    </select>
+  <label>Song Title</label>
+  <input id="songTitle" type="text" placeholder="Enter song title" />
 
-    <!-- you can extend with release_date, status, etc. later -->
+  <label>Label (Ivory Haven / Ivory Ocean)</label>
+  <input id="songLabel" type="text" placeholder="Ivory Haven or Ivory Ocean" />
 
-    <button id="addSongBtn">Add to tracker</button>
-    <div class="status" id="addStatus"></div>
-  </div>
+  <button onclick="addSong()">Add Song</button>
 
-  <div class="card">
-    <h2>Tracked songs</h2>
-    <button class="secondary" id="refreshBtn">Refresh list</button>
-    <div class="status" id="listStatus"></div>
-    <div class="songs-list" id="songsList"></div>
-  </div>
+  <h2 style="margin-top:40px;">Tracked Songs</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Label</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="songTableBody"></tbody>
+  </table>
+</div>
 
-  <script>
-    // 🔧 1) FILL THESE IN FROM SUPABASE DASHBOARD
-    const SUPABASE_URL = "https://wlzjymtugtovmitkkjsw.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsemp5bXR1Z3Rvdm1pdGtranN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjk4MzgsImV4cCI6MjA3ODg0NTgzOH0.vnHmV1GA--NXLLMWgetoS_AqZFYbHg2gWzMmQAncaME";
+<script src="supabase.js"></script>
+<script src="database.js"></script>
+<script src="music-tracker.js"></script>
 
-    const { createClient } = window.supabase;
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+<script>
+  // Load songs on page load
+  document.addEventListener("DOMContentLoaded", loadSongs);
 
-    const titleInput = document.getElementById("title");
-    const labelSelect = document.getElementById("label");
-    const addSongBtn = document.getElementById("addSongBtn");
-    const addStatus = document.getElementById("addStatus");
-    const listStatus = document.getElementById("listStatus");
-    const songsList = document.getElementById("songsList");
-    const refreshBtn = document.getElementById("refreshBtn");
+  async function loadSongs() {
+    const songs = await getAllSongs();
+    const tbody = document.getElementById("songTableBody");
+    tbody.innerHTML = "";
 
-    async function loadSongs() {
-      listStatus.textContent = "Loading songs…";
-      songsList.innerHTML = "";
-      const { data, error } = await supabase
-        .from("music_tracker")
-        .select("*")
-        .order("created_at", { ascending: false });
+    songs.forEach(song => {
+      const row = document.createElement("tr");
 
-      if (error) {
-        console.error(error);
-        listStatus.textContent = "Error loading songs: " + error.message;
-        return;
-      }
+      row.innerHTML = `
+        <td>${song.song_title}</td>
+        <td>${song.label}</td>
+        <td>
+          <button class="log-btn" onclick="logPlay('${song.id}')">Log Play</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
 
-      listStatus.textContent = `Loaded ${data.length} song(s).`;
+  async function addSong() {
+    const title = document.getElementById("songTitle").value.trim();
+    const label = document.getElementById("songLabel").value.trim();
 
-      data.forEach(row => {
-        const div = document.createElement("div");
-        div.className = "song-row";
-
-        const meta = document.createElement("div");
-        meta.className = "song-meta";
-
-        const title = document.createElement("div");
-        title.textContent = row.song_title;
-
-        const label = document.createElement("div");
-        label.className = "song-label";
-        label.textContent = row.label || "";
-
-        meta.appendChild(title);
-        meta.appendChild(label);
-
-        const logBtn = document.createElement("button");
-        logBtn.textContent = "Log play";
-        logBtn.onclick = () => logPlay(row.song_title, row.label);
-
-        div.appendChild(meta);
-        div.appendChild(logBtn);
-
-        songsList.appendChild(div);
-      });
+    if (!title) {
+      alert("Song title is required.");
+      return;
     }
 
-    async function addSong() {
-      const song_title = titleInput.value.trim();
-      const label = labelSelect.value;
-
-      if (!song_title) {
-        addStatus.textContent = "Please enter a song title.";
-        return;
-      }
-
-      addSongBtn.disabled = true;
-      addStatus.textContent = "Saving…";
-
-      const { error } = await supabase
-        .from("music_tracker")
-        .insert({ song_title, label });
-
-      addSongBtn.disabled = false;
-
-      if (error) {
-        console.error(error);
-        addStatus.textContent = "Error: " + error.message;
-        return;
-      }
-
-      addStatus.textContent = "Saved ✔";
-      titleInput.value = "";
-      await loadSongs();
-    }
-
-    async function logPlay(song_title, label) {
-      listStatus.textContent = `Logging play for "${song_title}"…`;
-
-      const { error } = await supabase
-        .from("play_logs")
-        .insert({ song_title, label });
-
-      if (error) {
-        console.error(error);
-        listStatus.textContent = "Error logging play: " + error.message;
-        return;
-      }
-
-      listStatus.textContent = `Logged play for "${song_title}".`;
-    }
-
-    addSongBtn.addEventListener("click", addSong);
-    refreshBtn.addEventListener("click", loadSongs);
-
-    // Initial load
+    await insertSong(title, label || "Unknown");
     loadSongs();
-  </script>
+  }
+
+  async function logPlay(songId) {
+    await createPlayLog(songId);
+    alert("Play logged!");
+  }
+</script>
+
 </body>
 </html>
