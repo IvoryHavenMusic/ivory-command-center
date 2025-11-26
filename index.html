@@ -137,7 +137,7 @@
   ];
   const $ = id => document.getElementById(id);
 
- <script>
+ 
   // ...keep everything else above as-is
 
   // Wire the button directly by ID so it can't miss
@@ -159,7 +159,7 @@
       alert('Magic link sent. Check your email!');
     }
   };
-</script>
+
 
   sb.auth.onAuthStateChange(async (_evt, session) => {
     const signedIn = !!session;
