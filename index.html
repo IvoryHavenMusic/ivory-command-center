@@ -137,10 +137,24 @@
   ];
   const $ = id => document.getElementById(id);
 
-  sendLink.onclick = async () => {
-    const { data, error } = await sb.auth.signInWithOtp({ email: email.value, options: { emailRedirectTo: window.location.href }});
-    alert(error ? error.message : 'Magic link sent. Check your inbox.');
-  };
+  sendLinkBtn.onclick = async () => {
+  const email = document.getElementById('email').value;
+
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
+      shouldCreateUser: true
+    }
+  });
+
+  if (error) {
+    console.error(error);
+    alert('Auth error: ' + error.message);
+  } else {
+    alert('Magic link sent. Check your email!');
+  }
+};
 
   sb.auth.onAuthStateChange(async (_evt, session) => {
     const signedIn = !!session;
