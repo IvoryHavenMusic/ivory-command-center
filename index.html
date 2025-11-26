@@ -141,10 +141,13 @@
   // ...keep everything else above as-is
 
   // Wire the button directly by ID so it can't miss
-  document.getElementById('sendLink').onclick = async () => {
+ document.getElementById('sendLink').onclick = async () => {
+  try {
+    alert('Attempting sign-in…');
     const email = document.getElementById('email').value.trim();
+    if (!email) { alert('Enter your email'); return; }
 
-    const { error } = await sb.auth.signInWithOtp({
+    const { data, error } = await sb.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
@@ -152,13 +155,15 @@
       }
     });
 
-    if (error) {
-      console.error(error);
-      alert('Auth error: ' + error.message);
-    } else {
-      alert('Magic link sent. Check your email!');
-    }
-  };
+    if (error) throw error;
+    alert('Magic link sent! Check your email.');
+  } catch (err) {
+    alert('Auth error: ' + err.message);
+    console.error(err);
+  }
+};
+
+window.addEventListener('error', (e) => alert('JS error: ' + e.message));
 
 
   sb.auth.onAuthStateChange(async (_evt, session) => {
