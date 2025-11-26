@@ -107,61 +107,109 @@
   </table>
 </div>
 
-<script type="module">
-  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+<!-- Supabase JS v2 via CDN (no modules) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // --- sanity ping so we know JS is running
+  alert('Tracker loaded ✅');
 
-  const SUPABASE_URL = 'https://wlzjymtugtovmitkkjsw.supabase.co';
-  const SUPABASE_ANON_KEY = sb_publishable_zFgq2…';
-  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // 1) Keys (must be strings)
+  const SUPABASE_URL = 'https://wlzjymtugtomvittkkjsw.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_zFgq2...'; // your full publishable key here
 
-  const authCard = document.getElementById('authCard');
-  const formCard = document.getElementById('formCard');
-  const listCard = document.getElementById('listCard');
-  const authState = document.getElementById('authState');
-  const sendLink = document.getElementById('sendLink');
-  const email = document.getElementById('email');
-  const saveBtn = document.getElementById('saveBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const refreshBtn = document.getElementById('refreshBtn');
-  const saveHint = document.getElementById('saveHint');
-  const countHint = document.getElementById('countHint');
-  const q = document.getElementById('q');
-  const tblBody = document.querySelector('#tbl tbody');
+  // 2) Client
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // 3) Wire up DOM refs
+  const authCard   = document.getElementById('authCard');
+  const formCard   = document.getElementById('formCard');
+  const listCard   = document.getElementById('listCard');
+  const authState  = document.getElementById('authState');
+  const sendLink   = document.getElementById('sendLink');
+  const emailInput = document.getElementById('email');
+  const tblBody    = document.querySelector('#tbl tbody');
+  const q          = document.getElementById('q');
 
   let editingId = null;
 
   const fields = [
-    'artist','song_title','release_date','category','genre','bpm',
-    'version','version_upgraded_from','streaming_status','video_status',
-    'demo_preference','pitch_by','remaster_needed','notes'
+    'artist','song_title','release_date','category','genre','bpm','version',
+    'version_upgraded_from','streaming_status','video_status','demo_preference',
+    'pitch_by','remaster_needed','notes'
   ];
-  const $ = id => document.getElementById(id);
 
- 
-  // ...keep everything else above as-is
+  // 4) Login button (with explicit redirect)
+  sendLink.onclick = async () => {
+    try {
+      alert('Sending magic link…');
+      const email = emailInput.value.trim();
+      if (!email) { alert('Enter your email'); return; }
 
-  // Wire the button directly by ID so it can't miss
- document.getElementById('sendLink').onclick = async () => {
-  try {
-    alert('Attempting sign-in…');
-    const email = document.getElementById('email').value.trim();
-    if (!email) { alert('Enter your email'); return; }
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
+          shouldCreateUser: true
+        }
+      });
 
-    const { data, error } = await sb.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
-        shouldCreateUser: true
+      if (error) throw error;
+      alert('Magic link sent! Check your email.');
+    } catch (err) {
+      console.error(err);
+      alert('Auth error: ' + err.message);
+    }
+  };
+
+  // 5) Auth state -> toggle UI
+  sb.auth.onAuthStateChange(async (_evt, session) => {
+    const signedIn = !!session;
+    authState.textContent = signedIn ? 'Signed in' : 'Signed out';
+    formCard.style.display = signedIn ? '' : 'none';
+    listCard.style.display = signedIn ? '' : 'none';
+    if (signedIn) loadRows();
+  });
+
+  // 6) Minimal loader (kept same shape as before)
+  async function loadRows() {
+    try {
+      let query = sb.from('music_tracker').select('*').order('release_date', { ascending:false }).limit(300);
+      const term = q.value?.trim();
+      if (term) {
+        query = sb.from('music_tracker')
+          .select('*')
+          .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
+          .order('release_date', { ascending:false })
+          .limit(300);
       }
-    });
-
-    if (error) throw error;
-    alert('Magic link sent! Check your email.');
-  } catch (err) {
-    alert('Auth error: ' + err.message);
-    console.error(err);
+      const { data, error } = await query;
+      if (error) throw error;
+      renderRows(data || []);
+    } catch (e) {
+      console.error(e);
+      alert('Load error: ' + e.message);
+    }
   }
-};
+
+  function renderRows(rows) {
+    tblBody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        `<td>${r.release_date ?? ''}</td>
+         <td>${r.artist ?? ''}</td>
+         <td>${r.song_title ?? ''}</td>
+         <td>${r.category ?? ''}</td>
+         <td>${r.genre ?? ''}</td>
+         <td>${r.bpm ?? ''}</td>
+         <td>${r.version ?? ''}</td>
+         <td>${r.streaming_status ?? ''}</td>
+         <td>${r.video_status ?? ''}</td>
+         <td>${(r.notes||'').slice(0,40)}</td>`;
+      tblBody.appendChild(tr);
+    });
+  }
+</script>
 
 window.addEventListener('error', (e) => alert('JS error: ' + e.message));
 
