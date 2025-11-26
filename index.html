@@ -137,24 +137,29 @@
   ];
   const $ = id => document.getElementById(id);
 
-  sendLinkBtn.onclick = async () => {
-  const email = document.getElementById('email').value;
+ <script>
+  // ...keep everything else above as-is
 
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
-      shouldCreateUser: true
+  // Wire the button directly by ID so it can't miss
+  document.getElementById('sendLink').onclick = async () => {
+    const email = document.getElementById('email').value.trim();
+
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
+        shouldCreateUser: true
+      }
+    });
+
+    if (error) {
+      console.error(error);
+      alert('Auth error: ' + error.message);
+    } else {
+      alert('Magic link sent. Check your email!');
     }
-  });
-
-  if (error) {
-    console.error(error);
-    alert('Auth error: ' + error.message);
-  } else {
-    alert('Magic link sent. Check your email!');
-  }
-};
+  };
+</script>
 
   sb.auth.onAuthStateChange(async (_evt, session) => {
     const signedIn = !!session;
