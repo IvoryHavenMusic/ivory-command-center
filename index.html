@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ivory Command Center – Music Tracker</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+  h1 { margin: 0 0 16px; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 0 0 16px; }
+  .row { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); }
+  label { font-size: 12px; color: #444; display:block; margin-bottom:4px; }
+  input, select, textarea { width:100%; padding:8px; border:1px solid #ccc; border-radius:8px; }
+  textarea { min-height: 72px; }
+  button { padding:10px 14px; border:0; border-radius:8px; cursor:pointer; }
+  .primary { background:#111; color:#fff; }
+  .ghost { background:#f2f2f2; }
+  table { width:100%; border-collapse: collapse; font-size:14px; }
+  th, td { padding:10px; border-bottom:1px solid #eee; }
+  tr:hover td { background:#fafafa; }
+  .actions button { margin-right:8px; }
+  .pill { font-size:12px; padding:3px 8px; background:#eee; border-radius:999px; }
+  .flex { display:flex; gap:8px; align-items:center; }
+  .right { margin-left:auto; }
+  .hint { color:#666; font-size:12px; }
+</style>
+</head>
+<body>
+
+<h1>🎹 Ivory Command Center — Music Release Tracker</h1>
+
+<div class="card" id="authCard">
+  <div class="row">
+    <div>
+      <label>Email (for magic link sign-in)</label>
+      <input id="email" type="email" placeholder="you@example.com" />
+    </div>
+  </div>
+  <div class="flex" style="margin-top:10px">
+    <button class="primary" id="sendLink">Send magic link</button>
+    <span class="hint">You’ll be logged in after clicking the link in your email.</span>
+    <span class="right pill" id="authState">Signed out</span>
+  </div>
+</div>
+
+<div class="card" id="formCard" style="display:none">
+  <h3 id="formTitle">Add new track</h3>
+  <div class="row">
+    <div><label>Artist</label><input id="artist" placeholder="Ivory Haven / Ivory Ocean" /></div>
+    <div><label>Song Title</label><input id="song_title" /></div>
+    <div><label>Release Date</label><input id="release_date" type="date" /></div>
+    <div><label>Category</label>
+      <select id="category">
+        <option value="">—</option>
+        <option>Pop</option><option>Rock</option><option>Tropical</option>
+        <option>Afrobeat</option><option>EDM</option><option>Country</option>
+        <option>Halloween</option><option>Christmas</option>
+      </select>
+    </div>
+    <div><label>Genre</label><input id="genre" placeholder="e.g., Tropical House" /></div>
+    <div><label>BPM</label><input id="bpm" type="number" inputmode="numeric" /></div>
+    <div><label>Version</label><input id="version" placeholder="v6 / Final" /></div>
+    <div><label>Upgraded From</label><input id="version_upgraded_from" placeholder="v5 (optional)" /></div>
+    <div><label>Streaming Status</label>
+      <select id="streaming_status">
+        <option value="">—</option>
+        <option>Draft</option><option>Scheduled</option><option>Released</option>
+      </select>
+    </div>
+    <div><label>Video Status</label>
+      <select id="video_status">
+        <option value="">—</option>
+        <option>None</option><option>Short</option><option>Full Video</option><option>Both</option>
+      </select>
+    </div>
+    <div><label>Demo Preference</label><input id="demo_preference" placeholder="Demo 1 / Demo 2" /></div>
+    <div><label>Pitch By</label><input id="pitch_by" placeholder="Mav / Goose / N/A" /></div>
+    <div><label>Remaster Needed?</label>
+      <select id="remaster_needed"><option value="false">No</option><option value="true">Yes</option></select>
+    </div>
+    <div style="grid-column:1/-1"><label>Notes (max 255)</label>
+      <textarea id="notes" maxlength="255" placeholder="Any quick details…"></textarea>
+    </div>
+  </div>
+  <div class="flex" style="margin-top:12px">
+    <button class="primary" id="saveBtn">Save</button>
+    <button class="ghost" id="resetBtn">Reset</button>
+    <span class="right hint" id="saveHint"></span>
+  </div>
+</div>
+
+<div class="card" id="listCard" style="display:none">
+  <div class="flex" style="margin-bottom:8px">
+    <strong>Library</strong>
+    <input id="q" placeholder="Search title/artist…" style="margin-left:12px; flex:1" />
+    <button class="ghost" id="refreshBtn">Refresh</button>
+    <span class="right hint" id="countHint"></span>
+  </div>
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>Release</th><th>Artist</th><th>Title</th><th>Cat</th><th>Genre</th>
+        <th>BPM</th><th>Ver</th><th>Stream</th><th>Video</th><th>Notes</th><th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+  const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const authCard = document.getElementById('authCard');
+  const formCard = document.getElementById('formCard');
+  const listCard = document.getElementById('listCard');
+  const authState = document.getElementById('authState');
+  const sendLink = document.getElementById('sendLink');
+  const email = document.getElementById('email');
+  const saveBtn = document.getElementById('saveBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const saveHint = document.getElementById('saveHint');
+  const countHint = document.getElementById('countHint');
+  const q = document.getElementById('q');
+  const tblBody = document.querySelector('#tbl tbody');
+
+  let editingId = null;
+
+  const fields = [
+    'artist','song_title','release_date','category','genre','bpm',
+    'version','version_upgraded_from','streaming_status','video_status',
+    'demo_preference','pitch_by','remaster_needed','notes'
+  ];
+  const $ = id => document.getElementById(id);
+
+  sendLink.onclick = async () => {
+    const { data, error } = await sb.auth.signInWithOtp({ email: email.value, options: { emailRedirectTo: window.location.href }});
+    alert(error ? error.message : 'Magic link sent. Check your inbox.');
+  };
+
+  sb.auth.onAuthStateChange(async (_evt, session) => {
+    const signedIn = !!session;
+    authState.textContent = signedIn ? 'Signed in' : 'Signed out';
+    formCard.style.display = signedIn ? '' : 'none';
+    listCard.style.display = signedIn ? '' : 'none';
+    if (signedIn) loadRows();
+  });
+
+  async function loadRows() {
+    const term = q.value?.trim();
+    let query = sb.from('music_tracker').select('*').order('release_date',{ascending:false}).limit(300);
+    if (term) {
+      query = sb.from('music_tracker')
+        .select('*')
+        .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
+        .order('release_date',{ascending:false})
+        .limit(300);
+    }
+    const { data, error, count } = await query;
+    if (error) { alert(error.message); return; }
+    renderRows(data||[]);
+  }
+
+  function renderRows(rows) {
+    tblBody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.release_date ?? ''}</td>
+        <td>${r.artist ?? ''}</td>
+        <td>${r.song_title ?? ''}</td>
+        <td>${r.category ?? ''}</td>
+        <td>${r.genre ?? ''}</td>
+        <td>${r.bpm ?? ''}</td>
+        <td>${r.version ?? ''}</td>
+        <td>${r.streaming_status ?? ''}</td>
+        <td>${r.video_status ?? ''}</td>
+        <td>${(r.notes||'').slice(0,40)}</td>
+        <td class="actions">
+          <button class="ghost" data-edit="${r.id}">Edit</button>
+          <button class="ghost" data-del="${r.id}">Del</button>
+        </td>`;
+      tblBody.appendChild(tr);
+    });
+    countHint.textContent = `${rows.length} row(s)`;
+  }
+
+  tblBody.onclick = async (e) => {
+    const id = e.target.dataset.edit || e.target.dataset.del;
+    if (!id) return;
+    if (e.target.dataset.edit) {
+      const { data, error } = await sb.from('music_tracker').select('*').eq('id', id).single();
+      if (error) return alert(error.message);
+      editingId = id;
+      $('formTitle').textContent = 'Edit track';
+      fields.forEach(f => { $(f).value = data[f] ?? ''; });
+      if (data.remaster_needed) $('remaster_needed').value = 'true';
+      window.scrollTo({ top:0, behavior:'smooth' });
+    } else if (e.target.dataset.del) {
+      if (!confirm('Delete this row?')) return;
+      const { error } = await sb.from('music_tracker').delete().eq('id', id);
+      if (error) return alert(error.message);
+      loadRows();
+    }
+  };
+
+  resetBtn.onclick = () => {
+    editingId = null;
+    $('formTitle').textContent = 'Add new track';
+    fields.forEach(f => { $(f).value = ''; });
+    $('remaster_needed').value = 'false';
+    saveHint.textContent = '';
+  };
+
+  saveBtn.onclick = async () => {
+    const payload = Object.fromEntries(fields.map(f => [f, $(f).value || null]));
+    payload.bpm = payload.bpm ? Number(payload.bpm) : null;
+    payload.remaster_needed = (payload.remaster_needed === 'true');
+
+    saveHint.textContent = 'Saving…';
+    let resp;
+    if (editingId) {
+      resp = await sb.from('music_tracker').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editingId).select().single();
+    } else {
+      resp = await sb.from('music_tracker').insert(payload).select().single();
+    }
+    const { error } = resp;
+    saveHint.textContent = error ? ('Error: ' + error.message) : 'Saved ✔';
+    if (!error) { resetBtn.click(); loadRows(); }
+    setTimeout(()=> saveHint.textContent='', 2000);
+  };
+
+  q.oninput = () => loadRows();
+  refreshBtn.onclick = () => loadRows();
+
+  // Kick auth check on load
+  (async ()=> {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) { formCard.style.display=''; listCard.style.display=''; loadRows(); }
+  })();
+</script>
+</body>
+</html>
