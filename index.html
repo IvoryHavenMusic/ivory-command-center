@@ -3,315 +3,203 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Ivory Command Center – Music Tracker</title>
+<title>Ivory Command Center — Music Release Tracker</title>
 <style>
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+  :root { --ink:#111; --muted:#666; --line:#e9e9e9; --pill:#eee; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; color:var(--ink); }
   h1 { margin: 0 0 16px; }
-  .card { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin: 0 0 16px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 0 0 16px; background:#fff; }
   .row { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); }
-  label { font-size: 12px; color: #444; display:block; margin-bottom:4px; }
-  input, select, textarea { width:100%; padding:8px; border:1px solid #ccc; border-radius:8px; }
-  textarea { min-height: 72px; }
-  button { padding:10px 14px; border:0; border-radius:8px; cursor:pointer; }
+  label { font-size: 12px; color: var(--muted); display:block; margin-bottom:4px; }
+  input, select { width:100%; padding:10px; border:1px solid #ccc; border-radius:10px; font-size:14px; }
+  button { padding:10px 14px; border:0; border-radius:10px; cursor:pointer; font-weight:600; }
   .primary { background:#111; color:#fff; }
-  .ghost { background:#f2f2f2; }
-  table { width:100%; border-collapse: collapse; font-size:14px; }
-  th, td { padding:10px; border-bottom:1px solid #eee; }
-  tr:hover td { background:#fafafa; }
-  .actions button { margin-right:8px; }
-  .pill { font-size:12px; padding:3px 8px; background:#eee; border-radius:999px; }
+  .ghost { background:#f4f4f4; }
   .flex { display:flex; gap:8px; align-items:center; }
   .right { margin-left:auto; }
-  .hint { color:#666; font-size:12px; }
+  .pill { font-size:12px; padding:4px 10px; background:var(--pill); border-radius:999px; }
+  .hint { color:var(--muted); font-size:12px; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; }
+  th, td { padding:10px; border-bottom:1px solid #f0f0f0; text-align:left; font-size:14px; }
+  tr:hover td { background:#fafafa; }
+  #toast { position:fixed; left:16px; right:16px; bottom:16px; padding:12px 14px; border-radius:10px; background:#111; color:#fff; display:none; }
 </style>
 </head>
 <body>
 
 <h1>🎹 Ivory Command Center — Music Release Tracker</h1>
 
-<!-- AUTH CARD -->
+<!-- Auth -->
 <div class="card" id="authCard">
   <div class="row">
-    <div>
-      <label>Email (for magic link sign-in)</label>
-      <input id="email" type="email" placeholder="you@example.com" />
-    </div>
-  </div>
-  <div class="flex" style="margin-top:10px">
-    <button class="primary" id="sendLink">Send magic link</button>
-    <span class="hint">You’ll be logged in after clicking the link in your email.</span>
-    <span class="right pill" id="authState">Signed out</span>
-  </div>
-</div>
-
-<!-- FORM CARD -->
-<div class="card" id="formCard" style="display:none">
-  <h3 id="formTitle">Add new track</h3>
-  <div class="row">
-    <div><label>Artist</label><input id="artist"/></div>
-    <div><label>Song Title</label><input id="song_title"/></div>
-    <div><label>Release Date</label><input id="release_date" type="date"/></div>
-    <div><label>Category</label>
-      <select id="category">
-        <option value="">—</option>
-        <option>Pop</option><option>Rock</option><option>Tropical</option>
-        <option>Afrobeat</option><option>EDM</option><option>Country</option>
-        <option>Halloween</option><option>Christmas</option>
-      </select>
-    </div>
-    <div><label>Genre</label><input id="genre"/></div>
-    <div><label>BPM</label><input id="bpm" type="number"/></div>
-    <div><label>Version</label><input id="version"/></div>
-    <div><label>Upgraded From</label><input id="version_upgraded_from"/></div>
-    <div><label>Streaming Status</label>
-      <select id="streaming_status">
-        <option value="">—</option><option>Draft</option>
-        <option>Scheduled</option><option>Released</option>
-      </select>
-    </div>
-    <div><label>Video Status</label>
-      <select id="video_status">
-        <option value="">—</option>
-        <option>None</option><option>Short</option><option>Full Video</option><option>Both</option>
-      </select>
-    </div>
-    <div><label>Demo Preference</label><input id="demo_preference"/></div>
-    <div><label>Pitch By</label><input id="pitch_by"/></div>
-    <div><label>Remaster Needed?</label>
-      <select id="remaster_needed"><option value="false">No</option><option value="true">Yes</option></select>
-    </div>
-    <div style="grid-column:1/-1">
-      <label>Notes (max 255)</label>
-      <textarea id="notes" maxlength="255"></textarea>
-    </div>
+    <div><label>Email</label><input id="email" type="email" placeholder="you@example.com" /></div>
+    <div><label>Password</label><input id="password" type="password" placeholder="••••••••" /></div>
   </div>
   <div class="flex" style="margin-top:12px">
-    <button class="primary" id="saveBtn">Save</button>
-    <button class="ghost" id="resetBtn">Reset</button>
-    <span class="right hint" id="saveHint"></span>
+    <button class="primary" id="btnSignIn">Sign in</button>
+    <button class="ghost" id="btnSignUp">Create account</button>
+    <span class="right pill" id="authState">Signed out</span>
   </div>
+  <div class="hint" id="authHint" style="margin-top:8px"></div>
 </div>
 
-<!-- TABLE CARD -->
-<div class="card" id="listCard" style="display:none">
+<!-- App UI -->
+<div class="card" id="appCard" style="display:none">
   <div class="flex" style="margin-bottom:8px">
     <strong>Library</strong>
     <input id="q" placeholder="Search title/artist…" style="margin-left:12px; flex:1" />
-    <button class="ghost" id="refreshBtn">Refresh</button>
-    <span class="right hint" id="countHint"></span>
+    <button class="ghost" id="btnRefresh">Refresh</button>
+    <button class="ghost right" id="btnSignOut">Sign out</button>
   </div>
-  <table id="tbl">
+  <table>
     <thead>
       <tr>
-        <th>Release</th><th>Artist</th><th>Title</th><th>Cat</th><th>Genre</th>
-        <th>BPM</th><th>Ver</th><th>Stream</th><th>Video</th><th>Notes</th><th></th>
+        <th>Release</th><th>Artist</th><th>Title</th><th>Cat</th><th>Genre</th><th>BPM</th><th>Ver</th><th>Stream</th><th>Video</th><th>Notes</th>
       </tr>
     </thead>
-    <tbody></tbody>
+    <tbody id="tbody"></tbody>
   </table>
+  <div class="hint" id="countHint" style="margin-top:6px"></div>
 </div>
 
+<div id="toast"></div>
+
+<!-- Supabase v2 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-/* --------------------------
-   🔧 Supabase Config
---------------------------- */
-const SUPABASE_URL = "https://wlzjymtugtomvittkkjsw.supabase.co";
-const SUPABASE_ANON_KEY =  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndsemppbXR1Z3Rvdm1pdGtranN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjk4MzgsImV4cCI6MjA3ODg0NTgzOH0.vnHmV1GA--NXLLMWgetoS_AqZFYbHg2gWzMmQAncaME';
+  // ====== CONFIG (yours) ======
+  const SUPABASE_URL = 'https://wlzjymtugtomvittkkjsw.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsemp5bXR1Z3Rvdm1pdGtranN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjk4MzgsImV4cCI6MjA3ODg0NTgzOH0.vnHmV1GA--NXLLMWgetoS_AqZFYbHg2gWzMmQAncaME';
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // ====== CLIENT ======
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* --------------------------
-   🔧 DOM References
---------------------------- */
-const authCard   = document.getElementById('authCard');
-const formCard   = document.getElementById('formCard');
-const listCard   = document.getElementById('listCard');
-const authState  = document.getElementById('authState');
-const sendLink   = document.getElementById('sendLink');
-const emailInput = document.getElementById('email');
-const tblBody    = document.querySelector('#tbl tbody');
-const q          = document.getElementById('q');
-const countHint  = document.getElementById('countHint');
+  // ====== DOM REFS ======
+  const authCard = document.getElementById('authCard');
+  const appCard  = document.getElementById('appCard');
+  const authState = document.getElementById('authState');
+  const authHint  = document.getElementById('authHint');
+  const email = document.getElementById('email');
+  const password = document.getElementById('password');
+  const btnSignIn = document.getElementById('btnSignIn');
+  const btnSignUp = document.getElementById('btnSignUp');
+  const btnSignOut = document.getElementById('btnSignOut');
+  const q = document.getElementById('q');
+  const btnRefresh = document.getElementById('btnRefresh');
+  const tbody = document.getElementById('tbody');
+  const countHint = document.getElementById('countHint');
+  const toast = document.getElementById('toast');
 
-let editingId = null;
+  function shout(msg, ok=false){ toast.textContent = msg; toast.style.display='block'; toast.style.background = ok ? '#0a7d0a' : '#111'; setTimeout(()=>toast.style.display='none', 2500); }
 
-const fields = [
-  'artist','song_title','release_date','category','genre','bpm','version',
-  'version_upgraded_from','streaming_status','video_status','demo_preference',
-  'pitch_by','remaster_needed','notes'
-];
+  function showApp(signedIn){
+    authState.textContent = signedIn ? 'Signed in' : 'Signed out';
+    authCard.style.display = signedIn ? 'none' : '';
+    appCard.style.display  = signedIn ? '' : 'none';
+  }
 
-function $(id){ return document.getElementById(id); }
-
-/* --------------------------
-   🔐 Send Magic Link
---------------------------- */
-sendLink.onclick = async () => {
-  const email = emailInput.value.trim();
-  if (!email) return alert("Enter your email");
-
-  const { error } = await sb.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: "https://ivoryhavenmusic.github.io/ivory-command-center/",
-      shouldCreateUser: true
+  // ====== AUTH HANDLERS ======
+  btnSignIn.onclick = async () => {
+    try {
+      authHint.textContent = 'Signing in…';
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: email.value.trim(), password: password.value
+      });
+      if (error) throw error;
+      showApp(true);
+      shout('Signed in', true);
+      await loadRows();
+    } catch (e) {
+      authHint.textContent = 'Auth error: ' + e.message;
+      shout(e.message);
     }
+  };
+
+  btnSignUp.onclick = async () => {
+    try {
+      authHint.textContent = 'Creating account…';
+      const { data, error } = await sb.auth.signUp({
+        email: email.value.trim(), password: password.value
+      });
+      if (error) throw error;
+      // With email confirmations OFF, you’re signed in immediately.
+      showApp(true);
+      shout('Account created', true);
+      await loadRows();
+    } catch (e) {
+      authHint.textContent = 'Signup error: ' + e.message;
+      shout(e.message);
+    }
+  };
+
+  btnSignOut.onclick = async () => {
+    await sb.auth.signOut();
+    showApp(false);
+    shout('Signed out', true);
+  };
+
+  // Keep UI in sync if session changes
+  sb.auth.onAuthStateChange((_evt, session) => {
+    const signedIn = !!session;
+    showApp(signedIn);
+    if (signedIn) loadRows();
   });
 
-  if (error) return alert("Auth error: " + error.message);
-  alert("Magic link sent! Check your email.");
-};
+  // ====== DATA (READ) ======
+  async function loadRows() {
+    try {
+      const term = (q.value || '').trim();
+      let req = sb.from('music_tracker')
+        .select('*')
+        .order('release_date', { ascending:false })
+        .limit(300);
 
-/* --------------------------
-   🔐 Auth State Change
---------------------------- */
-sb.auth.onAuthStateChange((evt, session) => {
-  const signedIn = !!session;
-  authState.textContent = signedIn ? "Signed in" : "Signed out";
-  formCard.style.display = signedIn ? "" : "none";
-  listCard.style.display = signedIn ? "" : "none";
-  if (signedIn) loadRows();
-});
+      if (term) {
+        req = sb.from('music_tracker')
+          .select('*')
+          .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
+          .order('release_date', { ascending:false })
+          .limit(300);
+      }
 
-/* --------------------------
-   📥 Load Rows
---------------------------- */
-async function loadRows() {
-  let query = sb.from('music_tracker')
-                .select('*')
-                .order('release_date', { ascending:false })
-                .limit(300);
-
-  const term = q.value.trim();
-  if (term) {
-    query = sb.from('music_tracker')
-      .select('*')
-      .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
-      .order('release_date',{ascending:false})
-      .limit(300);
+      const { data, error } = await req;
+      if (error) throw error;
+      render(data || []);
+      countHint.textContent = `${(data||[]).length} row(s)`;
+    } catch (e) {
+      shout('Load error: ' + e.message);
+    }
   }
 
-  const { data, error } = await query;
-  if (error) return alert(error.message);
-  renderRows(data);
-}
-
-/* --------------------------
-   📄 Render Rows
---------------------------- */
-function renderRows(rows){
-  tblBody.innerHTML = "";
-  rows.forEach(r=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-    <td>${r.release_date||""}</td>
-    <td>${r.artist||""}</td>
-    <td>${r.song_title||""}</td>
-    <td>${r.category||""}</td>
-    <td>${r.genre||""}</td>
-    <td>${r.bpm||""}</td>
-    <td>${r.version||""}</td>
-    <td>${r.streaming_status||""}</td>
-    <td>${r.video_status||""}</td>
-    <td>${(r.notes||"").slice(0,40)}</td>
-    <td class="actions">
-      <button class="ghost" data-edit="${r.id}">Edit</button>
-      <button class="ghost" data-del="${r.id}">Del</button>
-    </td>`;
-    tblBody.appendChild(tr);
-  });
-  countHint.textContent = `${rows.length} row(s)`;
-}
-
-/* --------------------------
-   ✏️ Table Click (Edit/Delete)
---------------------------- */
-tblBody.onclick = async (e)=>{
-  const id = e.target.dataset.edit || e.target.dataset.del;
-  if (!id) return;
-
-  if (e.target.dataset.edit){
-    const { data, error } = await sb.from('music_tracker').select('*').eq('id',id).single();
-    if (error) return alert(error.message);
-    editingId = id;
-    $('formTitle').textContent = "Edit track";
-    fields.forEach(f=>{ $(f).value = data[f] ?? ""; });
-    $('remaster_needed').value = data.remaster_needed ? "true":"false";
-    window.scrollTo({top:0,behavior:'smooth'});
+  function render(rows){
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        `<td>${r.release_date ?? ''}</td>
+         <td>${r.artist ?? ''}</td>
+         <td>${r.song_title ?? ''}</td>
+         <td>${r.category ?? ''}</td>
+         <td>${r.genre ?? ''}</td>
+         <td>${r.bpm ?? ''}</td>
+         <td>${r.version ?? ''}</td>
+         <td>${r.streaming_status ?? ''}</td>
+         <td>${r.video_status ?? ''}</td>
+         <td>${(r.notes||'').slice(0,40)}</td>`;
+      tbody.appendChild(tr);
+    });
   }
 
-  if (e.target.dataset.del){
-    if (!confirm("Delete this row?")) return;
-    const { error } = await sb.from('music_tracker').delete().eq('id',id);
-    if (error) return alert(error.message);
-    loadRows();
-  }
-};
+  // search/refresh
+  q.oninput = () => loadRows();
+  btnRefresh.onclick = () => loadRows();
 
-/* --------------------------
-   🔄 Reset Form
---------------------------- */
-resetBtn.onclick = ()=>{
-  editingId = null;
-  $('formTitle').textContent = "Add new track";
-  fields.forEach(f=>$(f).value="");
-  $('remaster_needed').value = "false";
-  $('saveHint').textContent = "";
-};
-
-/* --------------------------
-   💾 Save Row
---------------------------- */
-saveBtn.onclick = async ()=>{
-  const payload = Object.fromEntries(fields.map(f=>[f, $(f).value||null]));
-  payload.bpm = payload.bpm ? Number(payload.bpm) : null;
-  payload.remaster_needed = (payload.remaster_needed === "true");
-
-  $('saveHint').textContent = "Saving…";
-
-  let resp;
-  if (editingId){
-    resp = await sb.from('music_tracker')
-         .update({...payload, updated_at:new Date().toISOString()})
-         .eq('id',editingId)
-         .select()
-         .single();
-  } else {
-    resp = await sb.from('music_tracker')
-         .insert(payload)
-         .select()
-         .single();
-  }
-
-  if (resp.error){
-    $('saveHint').textContent = "Error: "+resp.error.message;
-  } else {
-    $('saveHint').textContent = "Saved ✔";
-    resetBtn.click();
-    loadRows();
-  }
-  setTimeout(()=> $('saveHint').textContent="", 2000);
-};
-
-/* --------------------------
-   🔍 Search + Refresh
---------------------------- */
-q.oninput = ()=>loadRows();
-refreshBtn.onclick = ()=>loadRows();
-
-/* --------------------------
-   🚀 On Page Load
---------------------------- */
-(async ()=>{
-  const { data:{session} } = await sb.auth.getSession();
-  if (session){
-    formCard.style.display="";
-    listCard.style.display="";
-    loadRows();
-  }
-})();
+  // On first load, decide which card to show
+  (async () => {
+    const { data: { session } } = await sb.auth.getSession();
+    showApp(!!session);
+    if (session) loadRows();
+  })();
 </script>
-
 </body>
 </html>
