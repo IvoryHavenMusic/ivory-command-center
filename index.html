@@ -29,6 +29,7 @@
 
 <h1>🎹 Ivory Command Center — Music Release Tracker</h1>
 
+<!-- AUTH CARD -->
 <div class="card" id="authCard">
   <div class="row">
     <div>
@@ -43,12 +44,13 @@
   </div>
 </div>
 
+<!-- FORM CARD -->
 <div class="card" id="formCard" style="display:none">
   <h3 id="formTitle">Add new track</h3>
   <div class="row">
-    <div><label>Artist</label><input id="artist" placeholder="Ivory Haven / Ivory Ocean" /></div>
-    <div><label>Song Title</label><input id="song_title" /></div>
-    <div><label>Release Date</label><input id="release_date" type="date" /></div>
+    <div><label>Artist</label><input id="artist"/></div>
+    <div><label>Song Title</label><input id="song_title"/></div>
+    <div><label>Release Date</label><input id="release_date" type="date"/></div>
     <div><label>Category</label>
       <select id="category">
         <option value="">—</option>
@@ -57,14 +59,14 @@
         <option>Halloween</option><option>Christmas</option>
       </select>
     </div>
-    <div><label>Genre</label><input id="genre" placeholder="e.g., Tropical House" /></div>
-    <div><label>BPM</label><input id="bpm" type="number" inputmode="numeric" /></div>
-    <div><label>Version</label><input id="version" placeholder="v6 / Final" /></div>
-    <div><label>Upgraded From</label><input id="version_upgraded_from" placeholder="v5 (optional)" /></div>
+    <div><label>Genre</label><input id="genre"/></div>
+    <div><label>BPM</label><input id="bpm" type="number"/></div>
+    <div><label>Version</label><input id="version"/></div>
+    <div><label>Upgraded From</label><input id="version_upgraded_from"/></div>
     <div><label>Streaming Status</label>
       <select id="streaming_status">
-        <option value="">—</option>
-        <option>Draft</option><option>Scheduled</option><option>Released</option>
+        <option value="">—</option><option>Draft</option>
+        <option>Scheduled</option><option>Released</option>
       </select>
     </div>
     <div><label>Video Status</label>
@@ -73,13 +75,14 @@
         <option>None</option><option>Short</option><option>Full Video</option><option>Both</option>
       </select>
     </div>
-    <div><label>Demo Preference</label><input id="demo_preference" placeholder="Demo 1 / Demo 2" /></div>
-    <div><label>Pitch By</label><input id="pitch_by" placeholder="Mav / Goose / N/A" /></div>
+    <div><label>Demo Preference</label><input id="demo_preference"/></div>
+    <div><label>Pitch By</label><input id="pitch_by"/></div>
     <div><label>Remaster Needed?</label>
       <select id="remaster_needed"><option value="false">No</option><option value="true">Yes</option></select>
     </div>
-    <div style="grid-column:1/-1"><label>Notes (max 255)</label>
-      <textarea id="notes" maxlength="255" placeholder="Any quick details…"></textarea>
+    <div style="grid-column:1/-1">
+      <label>Notes (max 255)</label>
+      <textarea id="notes" maxlength="255"></textarea>
     </div>
   </div>
   <div class="flex" style="margin-top:12px">
@@ -89,6 +92,7 @@
   </div>
 </div>
 
+<!-- TABLE CARD -->
 <div class="card" id="listCard" style="display:none">
   <div class="flex" style="margin-bottom:8px">
     <strong>Library</strong>
@@ -107,213 +111,207 @@
   </table>
 </div>
 
-<!-- Supabase JS v2 via CDN (no modules) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  // --- sanity ping so we know JS is running
-  alert('Tracker loaded ✅');
+/* --------------------------
+   🔧 Supabase Config
+--------------------------- */
+const SUPABASE_URL = "https://wlzjymtugtomvittkkjsw.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_zFqgZGPf1pNXeFu60YkuWQ_CSs61RbO";
 
-  // 1) Keys (must be strings)
-  const SUPABASE_URL = 'https://wlzjymtugtomvittkkjsw.supabase.co';
-  const SUPABASE_ANON_KEY = 'sb_publishable_zFgq2...'; // your full publishable key here
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // 2) Client
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+/* --------------------------
+   🔧 DOM References
+--------------------------- */
+const authCard   = document.getElementById('authCard');
+const formCard   = document.getElementById('formCard');
+const listCard   = document.getElementById('listCard');
+const authState  = document.getElementById('authState');
+const sendLink   = document.getElementById('sendLink');
+const emailInput = document.getElementById('email');
+const tblBody    = document.querySelector('#tbl tbody');
+const q          = document.getElementById('q');
+const countHint  = document.getElementById('countHint');
 
-  // 3) Wire up DOM refs
-  const authCard   = document.getElementById('authCard');
-  const formCard   = document.getElementById('formCard');
-  const listCard   = document.getElementById('listCard');
-  const authState  = document.getElementById('authState');
-  const sendLink   = document.getElementById('sendLink');
-  const emailInput = document.getElementById('email');
-  const tblBody    = document.querySelector('#tbl tbody');
-  const q          = document.getElementById('q');
+let editingId = null;
 
-  let editingId = null;
+const fields = [
+  'artist','song_title','release_date','category','genre','bpm','version',
+  'version_upgraded_from','streaming_status','video_status','demo_preference',
+  'pitch_by','remaster_needed','notes'
+];
 
-  const fields = [
-    'artist','song_title','release_date','category','genre','bpm','version',
-    'version_upgraded_from','streaming_status','video_status','demo_preference',
-    'pitch_by','remaster_needed','notes'
-  ];
+function $(id){ return document.getElementById(id); }
 
-  // 4) Login button (with explicit redirect)
-  sendLink.onclick = async () => {
-    try {
-      alert('Sending magic link…');
-      const email = emailInput.value.trim();
-      if (!email) { alert('Enter your email'); return; }
+/* --------------------------
+   🔐 Send Magic Link
+--------------------------- */
+sendLink.onclick = async () => {
+  const email = emailInput.value.trim();
+  if (!email) return alert("Enter your email");
 
-      const { error } = await sb.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/',
-          shouldCreateUser: true
-        }
-      });
-
-      if (error) throw error;
-      alert('Magic link sent! Check your email.');
-    } catch (err) {
-      console.error(err);
-      alert('Auth error: ' + err.message);
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: "https://ivoryhavenmusic.github.io/ivory-command-center/",
+      shouldCreateUser: true
     }
-  };
-
-  // 5) Auth state -> toggle UI
-  sb.auth.onAuthStateChange(async (_evt, session) => {
-    const signedIn = !!session;
-    authState.textContent = signedIn ? 'Signed in' : 'Signed out';
-    formCard.style.display = signedIn ? '' : 'none';
-    listCard.style.display = signedIn ? '' : 'none';
-    if (signedIn) loadRows();
   });
 
-  // 6) Minimal loader (kept same shape as before)
-  async function loadRows() {
-    try {
-      let query = sb.from('music_tracker').select('*').order('release_date', { ascending:false }).limit(300);
-      const term = q.value?.trim();
-      if (term) {
-        query = sb.from('music_tracker')
-          .select('*')
-          .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
-          .order('release_date', { ascending:false })
-          .limit(300);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      renderRows(data || []);
-    } catch (e) {
-      console.error(e);
-      alert('Load error: ' + e.message);
-    }
+  if (error) return alert("Auth error: " + error.message);
+  alert("Magic link sent! Check your email.");
+};
+
+/* --------------------------
+   🔐 Auth State Change
+--------------------------- */
+sb.auth.onAuthStateChange((evt, session) => {
+  const signedIn = !!session;
+  authState.textContent = signedIn ? "Signed in" : "Signed out";
+  formCard.style.display = signedIn ? "" : "none";
+  listCard.style.display = signedIn ? "" : "none";
+  if (signedIn) loadRows();
+});
+
+/* --------------------------
+   📥 Load Rows
+--------------------------- */
+async function loadRows() {
+  let query = sb.from('music_tracker')
+                .select('*')
+                .order('release_date', { ascending:false })
+                .limit(300);
+
+  const term = q.value.trim();
+  if (term) {
+    query = sb.from('music_tracker')
+      .select('*')
+      .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
+      .order('release_date',{ascending:false})
+      .limit(300);
   }
 
-  function renderRows(rows) {
-    tblBody.innerHTML = '';
-    rows.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML =
-        `<td>${r.release_date ?? ''}</td>
-         <td>${r.artist ?? ''}</td>
-         <td>${r.song_title ?? ''}</td>
-         <td>${r.category ?? ''}</td>
-         <td>${r.genre ?? ''}</td>
-         <td>${r.bpm ?? ''}</td>
-         <td>${r.version ?? ''}</td>
-         <td>${r.streaming_status ?? ''}</td>
-         <td>${r.video_status ?? ''}</td>
-         <td>${(r.notes||'').slice(0,40)}</td>`;
-      tblBody.appendChild(tr);
-    });
-  }
-</script>
+  const { data, error } = await query;
+  if (error) return alert(error.message);
+  renderRows(data);
+}
 
-window.addEventListener('error', (e) => alert('JS error: ' + e.message));
-
-
-  sb.auth.onAuthStateChange(async (_evt, session) => {
-    const signedIn = !!session;
-    authState.textContent = signedIn ? 'Signed in' : 'Signed out';
-    formCard.style.display = signedIn ? '' : 'none';
-    listCard.style.display = signedIn ? '' : 'none';
-    if (signedIn) loadRows();
+/* --------------------------
+   📄 Render Rows
+--------------------------- */
+function renderRows(rows){
+  tblBody.innerHTML = "";
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+    <td>${r.release_date||""}</td>
+    <td>${r.artist||""}</td>
+    <td>${r.song_title||""}</td>
+    <td>${r.category||""}</td>
+    <td>${r.genre||""}</td>
+    <td>${r.bpm||""}</td>
+    <td>${r.version||""}</td>
+    <td>${r.streaming_status||""}</td>
+    <td>${r.video_status||""}</td>
+    <td>${(r.notes||"").slice(0,40)}</td>
+    <td class="actions">
+      <button class="ghost" data-edit="${r.id}">Edit</button>
+      <button class="ghost" data-del="${r.id}">Del</button>
+    </td>`;
+    tblBody.appendChild(tr);
   });
+  countHint.textContent = `${rows.length} row(s)`;
+}
 
-  async function loadRows() {
-    const term = q.value?.trim();
-    let query = sb.from('music_tracker').select('*').order('release_date',{ascending:false}).limit(300);
-    if (term) {
-      query = sb.from('music_tracker')
-        .select('*')
-        .or(`song_title.ilike.%${term}%,artist.ilike.%${term}%`)
-        .order('release_date',{ascending:false})
-        .limit(300);
-    }
-    const { data, error, count } = await query;
-    if (error) { alert(error.message); return; }
-    renderRows(data||[]);
+/* --------------------------
+   ✏️ Table Click (Edit/Delete)
+--------------------------- */
+tblBody.onclick = async (e)=>{
+  const id = e.target.dataset.edit || e.target.dataset.del;
+  if (!id) return;
+
+  if (e.target.dataset.edit){
+    const { data, error } = await sb.from('music_tracker').select('*').eq('id',id).single();
+    if (error) return alert(error.message);
+    editingId = id;
+    $('formTitle').textContent = "Edit track";
+    fields.forEach(f=>{ $(f).value = data[f] ?? ""; });
+    $('remaster_needed').value = data.remaster_needed ? "true":"false";
+    window.scrollTo({top:0,behavior:'smooth'});
   }
 
-  function renderRows(rows) {
-    tblBody.innerHTML = '';
-    rows.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.release_date ?? ''}</td>
-        <td>${r.artist ?? ''}</td>
-        <td>${r.song_title ?? ''}</td>
-        <td>${r.category ?? ''}</td>
-        <td>${r.genre ?? ''}</td>
-        <td>${r.bpm ?? ''}</td>
-        <td>${r.version ?? ''}</td>
-        <td>${r.streaming_status ?? ''}</td>
-        <td>${r.video_status ?? ''}</td>
-        <td>${(r.notes||'').slice(0,40)}</td>
-        <td class="actions">
-          <button class="ghost" data-edit="${r.id}">Edit</button>
-          <button class="ghost" data-del="${r.id}">Del</button>
-        </td>`;
-      tblBody.appendChild(tr);
-    });
-    countHint.textContent = `${rows.length} row(s)`;
+  if (e.target.dataset.del){
+    if (!confirm("Delete this row?")) return;
+    const { error } = await sb.from('music_tracker').delete().eq('id',id);
+    if (error) return alert(error.message);
+    loadRows();
+  }
+};
+
+/* --------------------------
+   🔄 Reset Form
+--------------------------- */
+resetBtn.onclick = ()=>{
+  editingId = null;
+  $('formTitle').textContent = "Add new track";
+  fields.forEach(f=>$(f).value="");
+  $('remaster_needed').value = "false";
+  $('saveHint').textContent = "";
+};
+
+/* --------------------------
+   💾 Save Row
+--------------------------- */
+saveBtn.onclick = async ()=>{
+  const payload = Object.fromEntries(fields.map(f=>[f, $(f).value||null]));
+  payload.bpm = payload.bpm ? Number(payload.bpm) : null;
+  payload.remaster_needed = (payload.remaster_needed === "true");
+
+  $('saveHint').textContent = "Saving…";
+
+  let resp;
+  if (editingId){
+    resp = await sb.from('music_tracker')
+         .update({...payload, updated_at:new Date().toISOString()})
+         .eq('id',editingId)
+         .select()
+         .single();
+  } else {
+    resp = await sb.from('music_tracker')
+         .insert(payload)
+         .select()
+         .single();
   }
 
-  tblBody.onclick = async (e) => {
-    const id = e.target.dataset.edit || e.target.dataset.del;
-    if (!id) return;
-    if (e.target.dataset.edit) {
-      const { data, error } = await sb.from('music_tracker').select('*').eq('id', id).single();
-      if (error) return alert(error.message);
-      editingId = id;
-      $('formTitle').textContent = 'Edit track';
-      fields.forEach(f => { $(f).value = data[f] ?? ''; });
-      if (data.remaster_needed) $('remaster_needed').value = 'true';
-      window.scrollTo({ top:0, behavior:'smooth' });
-    } else if (e.target.dataset.del) {
-      if (!confirm('Delete this row?')) return;
-      const { error } = await sb.from('music_tracker').delete().eq('id', id);
-      if (error) return alert(error.message);
-      loadRows();
-    }
-  };
+  if (resp.error){
+    $('saveHint').textContent = "Error: "+resp.error.message;
+  } else {
+    $('saveHint').textContent = "Saved ✔";
+    resetBtn.click();
+    loadRows();
+  }
+  setTimeout(()=> $('saveHint').textContent="", 2000);
+};
 
-  resetBtn.onclick = () => {
-    editingId = null;
-    $('formTitle').textContent = 'Add new track';
-    fields.forEach(f => { $(f).value = ''; });
-    $('remaster_needed').value = 'false';
-    saveHint.textContent = '';
-  };
+/* --------------------------
+   🔍 Search + Refresh
+--------------------------- */
+q.oninput = ()=>loadRows();
+refreshBtn.onclick = ()=>loadRows();
 
-  saveBtn.onclick = async () => {
-    const payload = Object.fromEntries(fields.map(f => [f, $(f).value || null]));
-    payload.bpm = payload.bpm ? Number(payload.bpm) : null;
-    payload.remaster_needed = (payload.remaster_needed === 'true');
-
-    saveHint.textContent = 'Saving…';
-    let resp;
-    if (editingId) {
-      resp = await sb.from('music_tracker').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editingId).select().single();
-    } else {
-      resp = await sb.from('music_tracker').insert(payload).select().single();
-    }
-    const { error } = resp;
-    saveHint.textContent = error ? ('Error: ' + error.message) : 'Saved ✔';
-    if (!error) { resetBtn.click(); loadRows(); }
-    setTimeout(()=> saveHint.textContent='', 2000);
-  };
-
-  q.oninput = () => loadRows();
-  refreshBtn.onclick = () => loadRows();
-
-  // Kick auth check on load
-  (async ()=> {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) { formCard.style.display=''; listCard.style.display=''; loadRows(); }
-  })();
+/* --------------------------
+   🚀 On Page Load
+--------------------------- */
+(async ()=>{
+  const { data:{session} } = await sb.auth.getSession();
+  if (session){
+    formCard.style.display="";
+    listCard.style.display="";
+    loadRows();
+  }
+})();
 </script>
+
 </body>
 </html>
