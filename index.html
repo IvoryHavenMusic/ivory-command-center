@@ -2,189 +2,470 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Ivory Command Center — Releases</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ivory Command Center — Tracker</title>
+<link rel="icon" href="data:,">
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:24px}
-  h1{margin:0 0 16px}
-  .card{border:1px solid #ddd;border-radius:10px;padding:16px;margin:0 0 16px}
-  .row{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+  :root{
+    --bg:#fff; --ink:#111; --muted:#666; --line:#e9e9e9; --pill:#f2f2f2; --accent:#111;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif}
+  header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  h1{font-size:18px;margin:0}
+  .pill{background:var(--pill);border-radius:999px;padding:6px 10px;font-size:12px}
+  .right{margin-left:auto}
+  main{padding:18px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
   label{font-size:12px;color:#444;display:block;margin-bottom:4px}
-  input,select,textarea{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px}
-  button{padding:10px 14px;border:0;border-radius:8px;cursor:pointer;background:#111;color:#fff}
-  table{width:100%;border-collapse:collapse;font-size:14px}
-  th,td{padding:10px;border-bottom:1px solid #eee}
+  input,select,textarea{width:100%;padding:9px;border:1px solid #ccc;border-radius:9px;font:inherit}
+  textarea{min-height:72px}
+  button{padding:10px 14px;border:0;border-radius:9px;cursor:pointer;font-weight:600}
+  .primary{background:var(--accent);color:#fff}
+  .ghost{background:#f5f5f5}
+  .danger{background:#ef4d4d;color:#fff}
+  .tabs{display:flex;gap:6px;margin-bottom:10px}
+  .tab{padding:8px 12px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:#fafafa;cursor:pointer}
+  .tab.active{background:#fff;border-bottom:1px solid #fff}
+  .panel{border:1px solid var(--line);border-radius:0 12px 12px 12px;padding:12px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
   tr:hover td{background:#fafafa}
-  .hint{color:#666;font-size:12px}
+  .actions button{margin-right:6px}
+  .hint{font-size:12px;color:#666}
+  #console{white-space:pre-wrap;background:#0f172a;color:#e5e7eb;padding:10px;border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  @media (max-width:600px){ .row{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
 
-<h1>🎹 Ivory Command Center — Releases</h1>
+<header>
+  <h1>🎹 Ivory Command Center — Music Tracker</h1>
+  <span class="pill" id="authState">Signed out</span>
+  <span class="right">
+    <button class="ghost" id="signOutBtn" style="display:none">Sign out</button>
+  </span>
+</header>
 
-<div class="card">
-  <div class="row">
-    <div><label>Filter</label><input id="q" placeholder="Search title/artist…" /></div>
-    <div><label class="hint">RLS is OFF, so no login needed (dev only).</label></div>
-  </div>
-  <div style="margin-top:12px"><button id="refreshBtn">Refresh</button></div>
-</div>
-
-<div class="card">
-  <h3>Add Song</h3>
-  <div class="row">
-    <div><label>Title</label><input id="s_title" /></div>
-    <div><label>Artist</label>
-      <select id="s_artist"><option>Ivory Haven</option><option>Ivory Ocean</option></select>
+<main>
+  <!-- AUTH -->
+  <div class="card" id="authCard">
+    <div class="row">
+      <div>
+        <label>Email</label>
+        <input id="email" type="email" placeholder="you@example.com">
+      </div>
+      <div>
+        <label>Password</label>
+        <input id="password" type="password" placeholder="••••••••">
+      </div>
     </div>
-    <div><label>BPM</label><input id="s_bpm" type="number" /></div>
-    <div><label>Key Root</label><input id="s_key" placeholder="E / F# / G♭" /></div>
-    <div><label>Mode</label><select id="s_mode"><option>major</option><option>minor</option></select></div>
-    <div><label>Nashville</label><input id="s_nash" placeholder="1-5-6-4" /></div>
-  </div>
-  <div style="margin-top:8px"><button id="addSongBtn">Add Song</button> <span class="hint" id="songHint"></span></div>
-</div>
-
-<div class="card">
-  <h3>Add Release</h3>
-  <div class="row">
-    <div><label>Song</label><select id="r_song"></select></div>
-    <div><label>Release Date</label><input id="r_date" type="date" /></div>
-    <div><label>Streaming Status</label>
-      <select id="r_stream"><option>Draft</option><option>Scheduled</option><option>Released</option></select>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+      <button class="primary" id="signInBtn">Sign in</button>
+      <button class="ghost" id="signUpBtn">Create account</button>
+      <span class="hint" id="authHint"></span>
     </div>
-    <div><label>Video Status</label>
-      <select id="r_video"><option>None</option><option>Short</option><option>Full Video</option><option>Both</option></select>
-    </div>
-    <div><label>Version</label><input id="r_version" placeholder="v6 / Final" /></div>
-    <div><label>ISRC</label><input id="r_isrc" /></div>
   </div>
-  <div style="margin-top:8px"><button id="addReleaseBtn">Add Release</button> <span class="hint" id="relHint"></span></div>
-</div>
 
-<div class="card">
-  <div class="hint" id="countHint"></div>
-  <table id="tbl">
-    <thead>
-      <tr>
-        <th>Release</th><th>Artist</th><th>Title</th><th>BPM</th><th>Key</th><th>Mode</th>
-        <th>Stream</th><th>Video</th><th>Version</th><th>ISRC</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-</div>
+  <!-- APP -->
+  <div id="app" style="display:none">
+    <div class="tabs">
+      <div class="tab active" data-tab="songs">Songs</div>
+      <div class="tab" data-tab="releases">Releases</div>
+    </div>
 
+    <div class="panel" id="panel-songs">
+      <div class="card">
+        <h3 id="songFormTitle">Add song</h3>
+        <div class="row">
+          <div><label>Title</label><input id="s_title"></div>
+          <div><label>Artist</label>
+            <select id="s_artist">
+              <option>Ivory Haven</option>
+              <option>Ivory Ocean</option>
+            </select>
+          </div>
+          <div><label>BPM</label><input id="s_bpm" type="number" inputmode="numeric"></div>
+          <div><label>Key (root)</label><input id="s_key_root" placeholder="F / F# / E"></div>
+          <div><label>Mode</label>
+            <select id="s_mode"><option>major</option><option>minor</option></select>
+          </div>
+          <div><label>Nashville</label><input id="s_nashville" placeholder="I–V–vi–IV"></div>
+          <div><label>Perf. Key (root)</label><input id="s_perf_key_root" placeholder="capo’d key root"></div>
+          <div><label>Perf. Mode</label>
+            <select id="s_perf_mode"><option value="">—</option><option>major</option><option>minor</option></select>
+          </div>
+          <div><label>Capo fret</label><input id="s_capo" type="number" inputmode="numeric" placeholder="0–7"></div>
+          <div><label>Genre</label><input id="s_genre" placeholder="Future House / Tropical / …"></div>
+          <div style="grid-column:1/-1"><label>Notes (performance/songwriting)</label>
+            <textarea id="s_notes"></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <button class="primary" id="saveSongBtn">Save song</button>
+          <button class="ghost" id="resetSongBtn">Reset</button>
+          <span class="hint" id="songHint"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <strong>Song Catalog</strong>
+          <input id="songQ" placeholder="Search title/artist…" style="margin-left:12px;flex:1">
+          <button class="ghost" id="refreshSongsBtn">Refresh</button>
+          <span class="right hint" id="songCount"></span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Title</th><th>Artist</th><th>BPM</th><th>Key</th><th>Mode</th><th>Genre</th><th></th></tr>
+          </thead>
+          <tbody id="songsTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-releases" style="display:none">
+      <div class="card">
+        <h3 id="relFormTitle">Add release</h3>
+        <div class="row">
+          <div><label>Song</label><select id="r_song_id"></select></div>
+          <div><label>Release date</label><input id="r_release_date" type="date"></div>
+          <div><label>Streaming status</label>
+            <select id="r_streaming_status"><option value="">—</option><option>Draft</option><option>Scheduled</option><option>Released</option></select>
+          </div>
+          <div><label>Video status</label>
+            <select id="r_video_status"><option value="">—</option><option>None</option><option>Short</option><option>Full Video</option><option>Both</option></select>
+          </div>
+          <div><label>Version</label><input id="r_version" placeholder="v6 / Final"></div>
+          <div><label>ISRC</label><input id="r_isrc" placeholder="e.g., QT6EC2517721"></div>
+          <div><label>Has feature?</label>
+            <select id="r_has_feature"><option value="false">No</option><option value="true">Yes</option></select>
+          </div>
+          <div><label>Featured artist(s)</label><input id="r_featured_artists" placeholder="Feat. Claire Skye"></div>
+          <div style="grid-column:1/-1"><label>Notes</label><textarea id="r_notes"></textarea></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <button class="primary" id="saveRelBtn">Save release</button>
+          <button class="ghost" id="resetRelBtn">Reset</button>
+          <span class="hint" id="relHint"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <strong>Releases</strong>
+          <input id="relQ" placeholder="Search title/artist/ISRC…" style="margin-left:12px;flex:1">
+          <button class="ghost" id="refreshRelBtn">Refresh</button>
+          <span class="right hint" id="relCount"></span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Release</th><th>Title</th><th>Artist</th>
+              <th>Streaming</th><th>Video</th><th>Version</th><th>ISRC</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="relsTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Console</strong>
+      <div id="console">Ready.</div>
+    </div>
+  </div>
+</main>
+
+<!-- Supabase v2 -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+/*** 1) Supabase client ***/
+const SUPABASE_URL = 'https://wlzjymtugtomvittkkjsw.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsemp5bXR1Z3Rvdm1pdGtranN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjk4MzgsImV4cCI6MjA3ODg0NTgzOH0.vnHmV1GA--NXLLMWgetoS_AqZFYbHg2gWzMmQAncaME';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const q = document.getElementById('q');
-const refreshBtn = document.getElementById('refreshBtn');
-const tblBody = document.querySelector('#tbl tbody');
-const countHint = document.getElementById('countHint');
+/*** 2) Helpers ***/
+const $ = (id)=>document.getElementById(id);
+const log = (msg)=> { const c=$('console'); c.textContent = (c.textContent?c.textContent+'\n':'') + msg; };
+const setBusy = (el, on)=> el.disabled = !!on;
 
-const s_title = document.getElementById('s_title');
-const s_artist = document.getElementById('s_artist');
-const s_bpm = document.getElementById('s_bpm');
-const s_key = document.getElementById('s_key');
-const s_mode = document.getElementById('s_mode');
-const s_nash = document.getElementById('s_nash');
-const songHint = document.getElementById('songHint');
+/*** 3) Auth UI ***/
+const authCard = $('authCard'), app = $('app'), authState = $('authState');
+$('signInBtn').onclick = async ()=>{
+  try{
+    setBusy(signInBtn,true);
+    $('authHint').textContent='Signing in…';
+    const email = $('email').value.trim(), password = $('password').value;
+    if(!email || !password) return $('authHint').textContent='Enter email and password.';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    $('authHint').textContent='Signed in ✔';
+  }catch(e){ log('Auth error: '+e.message); $('authHint').textContent='Auth error: '+e.message; }
+  finally{ setBusy(signInBtn,false); }
+};
+$('signUpBtn').onclick = async ()=>{
+  try{
+    setBusy(signUpBtn,true);
+    $('authHint').textContent='Creating account…';
+    const email = $('email').value.trim(), password = $('password').value;
+    if(!email || !password) return $('authHint').textContent='Enter email and password.';
+    const { error } = await sb.auth.signUp({ email, password });
+    if(error) throw error;
+    $('authHint').textContent='Account created. Now sign in.';
+  }catch(e){ log('Signup error: '+e.message); $('authHint').textContent='Signup error: '+e.message; }
+  finally{ setBusy(signUpBtn,false); }
+};
+$('signOutBtn').onclick = async ()=>{ await sb.auth.signOut(); };
 
-const r_song = document.getElementById('r_song');
-const r_date = document.getElementById('r_date');
-const r_stream = document.getElementById('r_stream');
-const r_video = document.getElementById('r_video');
-const r_version = document.getElementById('r_version');
-const r_isrc = document.getElementById('r_isrc');
-const relHint = document.getElementById('relHint');
+sb.auth.onAuthStateChange((_evt, session)=>{
+  const signedIn = !!session;
+  authState.textContent = signedIn ? 'Signed in' : 'Signed out';
+  authCard.style.display = signedIn ? 'none' : '';
+  app.style.display = signedIn ? '' : 'none';
+  $('signOutBtn').style.display = signedIn ? '' : 'none';
+  if(signedIn){ refreshSongs(); refreshRels(); populateSongDropdown(); }
+});
 
-async function loadSongsForSelect() {
-  const { data, error } = await sb.from('songs').select('id,title,artist').order('created_at',{ascending:false}).limit(500);
-  if (error) { console.error(error); return; }
-  r_song.innerHTML = data.map(s => `<option value="${s.id}">${s.artist} — ${s.title}</option>`).join('');
+/*** 4) Tabs ***/
+document.querySelectorAll('.tab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const tab = t.dataset.tab;
+    $('panel-songs').style.display = tab==='songs' ? '' : 'none';
+    $('panel-releases').style.display = tab==='releases' ? '' : 'none';
+  };
+});
+
+/*** 5) SONGS CRUD ***/
+let editingSongId = null;
+async function refreshSongs(){
+  try{
+    const term = $('songQ').value?.trim();
+    let q = sb.from('songs').select('*').order('created_at',{ascending:false}).limit(300);
+    if(term){
+      q = sb.from('songs').select('*')
+        .or(`title.ilike.%${term}%,artist.ilike.%${term}%`)
+        .order('created_at',{ascending:false}).limit(300);
+    }
+    const { data, error } = await q;
+    if(error) throw error;
+    renderSongs(data||[]);
+  }catch(e){ log('Load songs error: '+e.message); }
 }
-
-async function loadReleases() {
-  const term = (q.value||'').trim();
-  let query = sb.from('v_releases_full').select('*').limit(500).order('release_date',{ascending:false});
-  if (term) {
-    query = sb.from('v_releases_full')
-      .select('*')
-      .or(`title.ilike.%${term}%,artist.ilike.%${term}%`)
-      .limit(500)
-      .order('release_date',{ascending:false});
-  }
-  const { data, error } = await query;
-  if (error) { alert('Load error: '+error.message); return; }
-  renderRows(data||[]);
-}
-
-function renderRows(rows){
-  tblBody.innerHTML = '';
+function renderSongs(rows){
+  const tb = $('songsTbody'); tb.innerHTML='';
   rows.forEach(r=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r.release_date ?? ''}</td>
-      <td>${r.artist ?? ''}</td>
-      <td>${r.title ?? ''}</td>
-      <td>${r.bpm ?? ''}</td>
-      <td>${r.key_root ?? ''}</td>
-      <td>${r.mode ?? ''}</td>
-      <td>${r.streaming_status ?? ''}</td>
-      <td>${r.video_status ?? ''}</td>
-      <td>${r.version ?? ''}</td>
-      <td>${r.isrc ?? ''}</td>`;
-    tblBody.appendChild(tr);
+      <td>${r.title||''}</td>
+      <td>${r.artist||''}</td>
+      <td>${r.bpm??''}</td>
+      <td>${r.key_root??''}</td>
+      <td>${r.mode??''}</td>
+      <td>${r.genre??''}</td>
+      <td class="actions">
+        <button class="ghost" data-edit="${r.id}">Edit</button>
+        <button class="danger" data-del="${r.id}">Del</button>
+      </td>`;
+    tb.appendChild(tr);
   });
-  countHint.textContent = `${rows.length} release(s)`;
+  $('songCount').textContent = `${rows.length} song(s)`;
 }
-
-document.getElementById('addSongBtn').onclick = async ()=>{
-  songHint.textContent = 'Saving…';
-  const payload = {
-    title: s_title.value.trim(),
-    artist: s_artist.value,
-    bpm: s_bpm.value ? Number(s_bpm.value) : null,
-    key_root: s_key.value.trim() || null,
-    mode: s_mode.value,
-    nashville: s_nash.value.trim() || null
-  };
-  if (!payload.title) { songHint.textContent='Title required'; return; }
-  const { error } = await sb.from('songs').insert(payload);
-  songHint.textContent = error ? ('Error: '+error.message) : 'Saved ✔';
-  if (!error){ s_title.value=''; s_bpm.value=''; s_key.value=''; s_nash.value=''; loadSongsForSelect(); }
-  setTimeout(()=> songHint.textContent='', 2000);
+$('songsTbody').onclick = async (e)=>{
+  const id = e.target.dataset.edit || e.target.dataset.del;
+  if(!id) return;
+  if(e.target.dataset.edit){
+    const { data, error } = await sb.from('songs').select('*').eq('id', id).single();
+    if(error){ log(error.message); return; }
+    editingSongId = id;
+    $('songFormTitle').textContent='Edit song';
+    $('s_title').value = data.title||'';
+    $('s_artist').value = data.artist||'Ivory Haven';
+    $('s_bpm').value = data.bpm||'';
+    $('s_key_root').value = data.key_root||'';
+    $('s_mode').value = data.mode||'major';
+    $('s_nashville').value = data.nashville||'';
+    $('s_perf_key_root').value = data.performance_key_root||'';
+    $('s_perf_mode').value = data.performance_mode||'';
+    $('s_capo').value = data.capo_fret||'';
+    $('s_genre').value = data.genre||'';
+    $('s_notes').value = data.notes_performance||'';
+    window.scrollTo({top:0,behavior:'smooth'});
+  } else if(e.target.dataset.del){
+    if(!confirm('Delete this song?')) return;
+    const { error } = await sb.from('songs').delete().eq('id', id);
+    if(error){ log(error.message); return; }
+    refreshSongs(); populateSongDropdown();
+  }
 };
-
-document.getElementById('addReleaseBtn').onclick = async ()=>{
-  relHint.textContent = 'Saving…';
-  const payload = {
-    song_id: Number(r_song.value),
-    release_date: r_date.value || null,
-    streaming_status: r_stream.value,
-    video_status: r_video.value,
-    version: r_version.value.trim() || null,
-    isrc: r_isrc.value.trim() || null
-  };
-  if (!payload.song_id){ relHint.textContent='Pick a song'; return; }
-  const { error } = await sb.from('releases').insert(payload);
-  relHint.textContent = error ? ('Error: '+error.message) : 'Saved ✔';
-  if (!error){ r_date.value=''; r_version.value=''; r_isrc.value=''; loadReleases(); }
-  setTimeout(()=> relHint.textContent='', 2000);
+$('resetSongBtn').onclick = ()=>{
+  editingSongId=null; $('songFormTitle').textContent='Add song';
+  ['s_title','s_bpm','s_key_root','s_nashville','s_perf_key_root','s_capo','s_genre','s_notes'].forEach(id=>$(id).value='');
+  $('s_artist').value='Ivory Haven'; $('s_mode').value='major'; $('s_perf_mode').value='';
+  $('songHint').textContent='';
 };
+$('saveSongBtn').onclick = async ()=>{
+  try{
+    setBusy(saveSongBtn,true); $('songHint').textContent='Saving…';
+    const payload = {
+      title:$('s_title').value?.trim()||null,
+      artist:$('s_artist').value,
+      bpm: $('s_bpm').value?Number($('s_bpm').value):null,
+      key_root:$('s_key_root').value?.trim()||null,
+      mode:$('s_mode').value||null,
+      nashville:$('s_nashville').value?.trim()||null,
+      performance_key_root:$('s_perf_key_root').value?.trim()||null,
+      performance_mode:$('s_perf_mode').value||null,
+      capo_fret:$('s_capo').value?Number($('s_capo').value):null,
+      genre:$('s_genre').value?.trim()||null,
+      notes_performance:$('s_notes').value?.trim()||null
+    };
+    let resp;
+    if(editingSongId){
+      resp = await sb.from('songs').update(payload).eq('id', editingSongId).select().single();
+    }else{
+      resp = await sb.from('songs').insert(payload).select().single();
+    }
+    if(resp.error) throw resp.error;
+    $('songHint').textContent='Saved ✔';
+    setTimeout(()=>{$('songHint').textContent='';},1200);
+    $('resetSongBtn').click();
+    refreshSongs(); populateSongDropdown();
+  }catch(e){ log('Save song error: '+e.message); $('songHint').textContent = e.message; }
+  finally{ setBusy(saveSongBtn,false); }
+};
+$('songQ').oninput = ()=> refreshSongs();
+$('refreshSongsBtn').onclick = ()=> refreshSongs();
 
-q.oninput = ()=> loadReleases();
-refreshBtn.onclick = ()=> loadReleases();
+/*** 6) RELEASES CRUD ***/
+let editingRelId = null;
+async function populateSongDropdown(){
+  const { data, error } = await sb.from('songs').select('id,title,artist').order('created_at',{ascending:false}).limit(500);
+  if(error){ log('Song list error: '+error.message); return; }
+  const sel = $('r_song_id'); sel.innerHTML='';
+  (data||[]).forEach(s=>{
+    const opt = document.createElement('option');
+    opt.value = s.id; opt.textContent = `${s.title} — ${s.artist}`;
+    sel.appendChild(opt);
+  });
+}
+async function refreshRels(){
+  try{
+    // Use compact view for speed, with optional text filter
+    const term = $('relQ').value?.trim();
+    let { data, error } = await sb.from('v_releases_min').select('*').order('release_date',{ascending:false}).limit(500);
+    if(error) throw error;
+    if(term){
+      const t = term.toLowerCase();
+      data = (data||[]).filter(r =>
+        (r.title||'').toLowerCase().includes(t) ||
+        (r.artist||'').toLowerCase().includes(t) ||
+        (r.isrc||'').toLowerCase().includes(t)
+      );
+    }
+    renderRels(data||[]);
+  }catch(e){ log('Load releases error: '+e.message); }
+}
+function renderRels(rows){
+  const tb = $('relsTbody'); tb.innerHTML='';
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const date = r.release_date ? new Date(r.release_date).toISOString().slice(0,10) : '';
+    tr.innerHTML = `
+      <td>${date}</td>
+      <td>${r.title||''}</td>
+      <td>${r.artist||''}</td>
+      <td>${r.streaming_status||''}</td>
+      <td>${r.video_status||''}</td>
+      <td>${r.version||''}</td>
+      <td>${r.isrc||''}</td>
+      <td class="actions">
+        <button class="ghost" data-edit="${r.release_id}">Edit</button>
+        <button class="danger" data-del="${r.release_id}">Del</button>
+      </td>`;
+    tb.appendChild(tr);
+  });
+  $('relCount').textContent = `${rows.length} release(s)`;
+}
+$('relsTbody').onclick = async (e)=>{
+  const id = e.target.dataset.edit || e.target.dataset.del;
+  if(!id) return;
+  if(e.target.dataset.edit){
+    const { data, error } = await sb.from('releases').select('*').eq('id', id).single();
+    if(error){ log(error.message); return; }
+    editingRelId = id;
+    $('relFormTitle').textContent='Edit release';
+    $('r_song_id').value = data.song_id;
+    $('r_release_date').value = data.release_date ? new Date(data.release_date).toISOString().slice(0,10) : '';
+    $('r_streaming_status').value = data.streaming_status||'';
+    $('r_video_status').value = data.video_status||'';
+    $('r_version').value = data.version||'';
+    $('r_isrc').value = data.isrc||'';
+    $('r_has_feature').value = data.has_feature ? 'true' : 'false';
+    $('r_featured_artists').value = data.featured_artists||'';
+    $('r_notes').value = data.notes||'';
+    window.scrollTo({top:0,behavior:'smooth'});
+  } else if(e.target.dataset.del){
+    if(!confirm('Delete this release?')) return;
+    const { error } = await sb.from('releases').delete().eq('id', id);
+    if(error){ log(error.message); return; }
+    refreshRels();
+  }
+};
+$('resetRelBtn').onclick = ()=>{
+  editingRelId=null; $('relFormTitle').textContent='Add release';
+  ['r_song_id','r_release_date','r_streaming_status','r_video_status','r_version','r_isrc','r_featured_artists','r_notes'].forEach(id=>{
+    const el=$(id); if(el.tagName==='SELECT') el.value=''; else el.value='';
+  });
+  $('r_has_feature').value='false'; $('relHint').textContent='';
+};
+$('saveRelBtn').onclick = async ()=>{
+  try{
+    setBusy(saveRelBtn,true); $('relHint').textContent='Saving…';
+    const payload = {
+      song_id: Number($('r_song_id').value),
+      release_date: $('r_release_date').value || null,
+      streaming_status: $('r_streaming_status').value || null,
+      video_status: $('r_video_status').value || null,
+      version: $('r_version').value?.trim() || null,
+      isrc: $('r_isrc').value?.trim() || null,
+      has_feature: $('r_has_feature').value === 'true',
+      featured_artists: $('r_featured_artists').value?.trim() || null,
+      notes: $('r_notes').value?.trim() || null
+    };
+    let resp;
+    if(editingRelId){
+      resp = await sb.from('releases').update(payload).eq('id', editingRelId).select().single();
+    }else{
+      resp = await sb.from('releases').insert(payload).select().single();
+    }
+    if(resp.error) throw resp.error;
+    $('relHint').textContent='Saved ✔';
+    setTimeout(()=>{$('relHint').textContent='';},1200);
+    $('resetRelBtn').click();
+    refreshRels();
+  }catch(e){ log('Save release error: '+e.message); $('relHint').textContent=e.message; }
+  finally{ setBusy(saveRelBtn,false); }
+};
+$('relQ').oninput = ()=> refreshRels();
+$('refreshRelBtn').onclick = ()=> refreshRels();
 
-// init
+/*** 7) First load — check session (auto-show app if signed in) ***/
 (async ()=>{
-  await loadSongsForSelect();
-  await loadReleases();
+  try{
+    const { data:{ session } } = await sb.auth.getSession();
+    if(session){
+      authCard.style.display='none'; app.style.display=''; $('signOutBtn').style.display='';
+      authState.textContent = 'Signed in';
+      populateSongDropdown(); refreshSongs(); refreshRels();
+    }
+  }catch(e){ log('Init error: '+e.message); }
 })();
+
+/*** 8) Global JS error handler to surface issues on iPad ***/
+window.addEventListener('error', (e)=> { log('JS error: '+e.message); });
 </script>
 </body>
 </html>
