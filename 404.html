@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Ivory Tracker — Auth</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 640px; margin: 40px auto; padding: 0 16px;">
+  <h1>Ivory Tracker Login</h1>
+
+  <!-- Auth UI -->
+  <div id="auth-panel">
+    <p>Sign in with a magic link:</p>
+    <input id="email" type="email" placeholder="your@email.com" style="padding:8px; width:100%; max-width: 420px;">
+    <button id="email-btn" style="padding:10px 14px; margin-left: 8px; margin-top: 8px;">Send Magic Link</button>
+
+    <div style="margin: 18px 0; opacity:.6;">— or —</div>
+
+    <button id="google-btn" style="padding:10px 14px;">Continue with Google</button>
+  </div>
+
+  <!-- App UI (hidden until authenticated) -->
+  <div id="app" style="display:none; margin-top:24px;">
+    <p>Signed in as <strong id="user-email"></strong></p>
+    <button id="signout-btn" style="padding:8px 12px;">Sign out</button>
+
+    <hr style="margin:24px 0;">
+
+    <!-- Placeholder for the tracker UI we’ll wire next -->
+    <h2>🎵 Music Tracker</h2>
+    <p>Auth works. Drop your songs/tracker UI here next.</p>
+  </div>
+
+  <p id="status" style="margin-top:16px; min-height:1.2em;"></p>
+
+  <!-- Supabase client -->
+  <script type="module">
+    // Load client
+    import { supabase } from './supabase.js';
+
+    // ====== IMPORTANT: your GitHub Pages subpath ======
+    // If you move to a root domain later, set BASE_PATH = ''.
+    const BASE_PATH = '/ivory-command-center';
+
+    // Build the callback URL used by Magic Link + Google OAuth
+    function callbackUrl() {
+      return `${window.location.origin}${BASE_PATH}/auth/callback`;
+    }
+
+    // Elements
+    const statusEl   = document.getElementById('status');
+    const authPanel  = document.getElementById('auth-panel');
+    const appPanel   = document.getElementById('app');
+    const userEmailEl = document.getElementById('user-email');
+
+    const setStatus = (msg) => statusEl.textContent = msg ?? '';
+
+    // ----- Email Magic Link -----
+    document.getElementById('email-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      if (!email) return setStatus('Enter an email first.');
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: callbackUrl() },
+      });
+
+      if (error) setStatus(`Magic link error: ${error.message}`);
+      else setStatus('Check your email for the magic link.');
+    });
+
+    // ----- Google OAuth -----
+    document.getElementById('google-btn').addEventListener('click', async () => {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: callbackUrl() },
+      });
+      if (error) setStatus(`Google sign-in error: ${error.message}`);
+      // On success, browser redirects to /auth/callback with ?code=...
+    });
+
+    // ----- Handle PKCE callback (email & OAuth) -----
+    async function handleCallbackIfNeeded() {
+      const onCallbackPath = window.location.pathname === `${BASE_PATH}/auth/callback`;
+      const hasCode = new URL(window.location.href).searchParams.get('code');
+
+      if (onCallbackPath && hasCode) {
+        setStatus('Finalizing sign-in…');
+        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          setStatus(`Session exchange failed: ${error.message}`);
+          return;
+        }
+        // Strip query params and send to app root (under the base path)
+        window.history.replaceState({}, '', `${BASE_PATH}/`);
+        setStatus('');
+      }
+    }
+
+    // ----- Update UI on session changes -----
+    async function refreshUI() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        userEmailEl.textContent = session.user.email ?? '(no email)';
+        authPanel.style.display = 'none';
+        appPanel.style.display  = '';
+      } else {
+        authPanel.style.display = '';
+        appPanel.style.display  = 'none';
+      }
+    }
+
+    supabase.auth.onAuthStateChange((_event, _session) => {
+      refreshUI();
+    });
+
+    // ----- Sign out -----
+    document.getElementById('signout-btn').addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      setStatus('Signed out.');
+    });
+
+    // Boot:
+    await handleCallbackIfNeeded();
+    await refreshUI();
+
+    // // (Optional) quick debug in DevTools
+    // supabase.auth.onAuthStateChange((event, session) => {
+    //   console.log('[auth change]', event, session?.user?.email);
+    // });
+    // console.log('[origin]', window.location.origin, '[path]', window.location.pathname);
+  </script>
+</body>
+</html>
