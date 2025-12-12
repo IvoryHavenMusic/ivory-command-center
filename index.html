@@ -53,7 +53,7 @@
     __ok('Module script starting…');
 
     // ====== IMPORTANT: GitHub Pages subpath ======
-    const mod = await import(`${BASE_PATH}/supabase.js?v=9`);
+    const mod = await import(`${location.origin}${BASE_PATH}/supabase.js?v=11`);
 
     function callbackUrl() {
       return `${window.location.origin}${BASE_PATH}/auth/callback`;
