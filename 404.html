@@ -1,119 +1,166 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ivory Tracker Login (Diagnostic)</title>
+  <link rel="preconnect" href="https://esm.sh">
   <style>
-    body { font-family: Arial, sans-serif; padding: 40px; }
-    #status { padding: 10px; background:#f1f1f1; border-radius:8px; margin-bottom:20px; }
-    #auth-panel, #app { display:none; }
-    input { padding: 8px; width: 260px; }
-    button { padding: 8px 14px; }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:32px}
+    .card{background:#f4f6f8;border-radius:10px;padding:14px 16px;max-width:980px}
+    .ok{color:#0a7a00}.err{color:#b00020}
+    .row{margin:14px 0}
+    input{padding:10px;border:1px solid #cbd5e1;border-radius:6px;width:320px}
+    button{padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#eef3ff;cursor:pointer}
+    .muted{opacity:.7}
   </style>
 </head>
-
 <body>
   <h1>Ivory Tracker Login (Diagnostic)</h1>
 
-  <div id="status">Diag: page loaded</div>
+  <div id="status" class="card"></div>
 
-  <div id="auth-panel">
-    <p>Sign in with a magic link:</p>
+  <div id="auth-panel" class="row">
+    <div class="row">Sign in with a magic link:</div>
     <input id="email" type="email" placeholder="your@email.com" />
-    <button onclick="onEmailClick()">Send Magic Link</button>
+    <button id="send-link">Send Magic Link</button>
 
-    <p>— or —</p>
+    <div class="row muted">— or —</div>
 
-    <button onclick="onGoogleClick()">Continue with Google</button>
+    <button id="google">Continue with Google</button>
   </div>
 
-  <div id="app">
-    <h3>Logged in as: <span id="user-email"></span></h3>
-    <p>Welcome to the Ivory Command Center 🎹</p>
+  <div id="app" class="row" style="display:none">
+    <div class="row">Signed in as: <strong id="user-email"></strong></div>
+    <button id="signout">Sign out</button>
   </div>
 
   <script type="module">
-    const logBox = document.getElementById('status');
-    const _log = (m)=>{ logBox.innerHTML += `<br>${m}`; };
-    const _ok  = (m)=>_log(`<span style="color:green">${m}</span>`);
-    const _err = (m)=>_log(`<span style="color:crimson">${m}</span>`);
-
-    _ok("Diag bootstrap ready");
-    _ok("Module script starting...");
-
-    // ===== GITHUB PAGES SUBPATH =====
+    // ===== GitHub Pages subpath =====
     const BASE_PATH = '/ivory-command-center';
 
-    function callbackUrl(){
-      return `${location.origin}${BASE_PATH}/auth/callback`;
-    }
+    // ===== helpers =====
+    const statusEl = document.getElementById('status');
+    const authPanel = document.getElementById('auth-panel');
+    const appPanel  = document.getElementById('app');
+    const userEmail = document.getElementById('user-email');
 
-    // ===== ABSOLUTE IMPORT URL (NO MORE RELATIVE PROBLEMS) =====
-    const IMPORT_URL = `${location.origin}${BASE_PATH}/supabase.js?v=13`;
-    _ok(`Import URL: ${IMPORT_URL}`);
+    const log = (msg, ok=false, err=false) => {
+      const cls = err ? 'err' : ok ? 'ok' : '';
+      statusEl.innerHTML += `<div class="${cls}">${msg}</div>`;
+    };
+    const setAuthed = (email) => {
+      if (email) {
+        authPanel.style.display = 'none';
+        appPanel.style.display = '';
+        userEmail.textContent = email;
+      } else {
+        appPanel.style.display = 'none';
+        authPanel.style.display = '';
+        userEmail.textContent = '';
+      }
+    };
+    const callbackUrl = () =>
+      `${window.location.origin}${BASE_PATH}/auth/callback`;
 
-    let supabase = null;
-    let session = null;
+    // ===== page boot =====
+    log('Diag: page loaded');
+    log('Diag bootstrap ready');
 
-    // ===== TRY IMPORTING SUPABASE.JS =====
+    // ===== import supabase client (cache-busted) =====
     try {
-      const mod = await import(IMPORT_URL);
-      supabase = mod.supabase;
-      if (!supabase) throw new Error("supabase export missing");
-      _ok("Supabase imported OK ✔");
+      log('Module script starting…');
+      const v = Date.now().toString().slice(-6); // small cache buster
+      const mod = await import(`./supabase.js?v=${v}`);
+      const { supabase } = mod;
+      log(`Import URL: ${new URL(`./supabase.js?v=${v}`, location.href)}`);
+      log('Supabase imported OK ✅', true);
+
+      // ===== auth change listener =====
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        log(`[auth] ${event}`);
+        if (session?.user?.email) setAuthed(session.user.email);
+      });
+
+      // ===== are we on /auth/callback with a code? =====
+      const isCallbackPath = location.pathname.endsWith('/auth/callback') ||
+                             location.pathname.endsWith('/auth/callback/');
+      const params = new URLSearchParams(location.search);
+      const hasCode = params.has('code');
+
+      if (isCallbackPath) {
+        log(`Callback path detected: ${location.pathname}`);
+        log(`Has code: ${hasCode}`);
+
+        if (hasCode) {
+          try {
+            // Explicit exchange (reliable on iOS)
+            const { data, error } = await supabase.auth.exchangeCodeForSession(params.get('code'));
+            if (error) throw error;
+            log('Code exchanged for session ✅', true);
+          } catch (e) {
+            log(`exchangeCodeForSession error: ${e.message || e}`, false, true);
+          }
+        }
+
+        // Clean up URL, go back to app root
+        const dest = `${window.location.origin}${BASE_PATH}/`;
+        log(`Redirecting to app: ${dest}`);
+        window.location.replace(dest);
+        // Stop boot any further on callback page
+        throw new Error('Callback handled; stopping further boot');
+      }
+
+      // ===== not callback: show current session if any =====
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        log('Existing session found ✅', true);
+        setAuthed(session.user.email);
+      } else {
+        log('No session found');
+        setAuthed(null);
+      }
+
+      // ===== UI handlers =====
+      document.getElementById('send-link').onclick = async () => {
+        const email = (document.getElementById('email').value || '').trim();
+        if (!email) return log('Enter an email first.', false, true);
+        try {
+          const { error } = await supabase.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: callbackUrl() }
+          });
+          if (error) throw error;
+          log('Magic link sent. Check your email ✅', true);
+        } catch (e) {
+          log(`Magic link error: ${e.message || e}`, false, true);
+        }
+      };
+
+      document.getElementById('google').onclick = async () => {
+        try {
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+              redirectTo: callbackUrl(),
+              queryParams: { prompt: 'consent', access_type: 'offline' }
+            }
+          });
+          if (error) throw error;
+          // Supabase will redirect; no further action.
+        } catch (e) {
+          log(`Google OAuth error: ${e.message || e}`, false, true);
+        }
+      };
+
+      document.getElementById('signout').onclick = async () => {
+        await supabase.auth.signOut();
+        setAuthed(null);
+        log('Signed out.');
+      };
     } catch (e) {
-      _err("Failed to import supabase.js → " + e.message);
+      log(`Boot error: ${e.message || e}`, false, true);
     }
-
-    const authPanel = document.getElementById("auth-panel");
-    const appPanel  = document.getElementById("app");
-    const emailSpan = document.getElementById("user-email");
-
-    // ===== INITIAL SESSION CHECK =====
-    try {
-      const { data } = await supabase.auth.getSession();
-      session = data.session;
-    } catch {}
-
-    if (session?.user?.email) {
-      _ok(`Session found: ${session.user.email}`);
-      emailSpan.textContent = session.user.email;
-      authPanel.style.display = "none";
-      appPanel.style.display  = "block";
-    } else {
-      _ok("No session found");
-      authPanel.style.display = "block";
-    }
-
-    // ===== HANDLERS =====
-    window.onEmailClick = async function(){
-      const email = document.getElementById("email").value.trim();
-      if (!email) return _err("Enter an email first.");
-
-      try {
-        const { error } = await supabase.auth.signInWithOtp({
-          email,
-          options: { emailRedirectTo: callbackUrl() }
-        });
-        if (error) throw error;
-        _ok("Magic link sent!");
-      } catch (e) {
-        _err("Magic link error → " + e.message);
-      }
-    };
-
-    window.onGoogleClick = async function(){
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: callbackUrl() }
-        });
-        if (error) throw error;
-      } catch (e) {
-        _err("Google OAuth error → " + e.message);
-      }
-    };
   </script>
 </body>
 </html>
