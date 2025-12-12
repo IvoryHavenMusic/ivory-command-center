@@ -67,22 +67,21 @@
     log('Diag: page loaded');
     log('Diag bootstrap ready');
 
-    // ===== import supabase client (cache-busted) =====
     try {
       log('Module script starting…');
-      const v = Date.now().toString().slice(-6); // small cache buster
-      const mod = await import(`./supabase.js?v=${v}`);
+      const v = Date.now().toString().slice(-6); // cache buster
+      // *** FIX: absolute subpath import so it works on / and /auth/callback
+      const importUrl = `${BASE_PATH}/supabase.js?v=${v}`;
+      const mod = await import(importUrl);
+      log(`Import URL: ${new URL(importUrl, location.origin)}`);
       const { supabase } = mod;
-      log(`Import URL: ${new URL(`./supabase.js?v=${v}`, location.href)}`);
       log('Supabase imported OK ✅', true);
 
-      // ===== auth change listener =====
       supabase.auth.onAuthStateChange(async (event, session) => {
         log(`[auth] ${event}`);
         if (session?.user?.email) setAuthed(session.user.email);
       });
 
-      // ===== are we on /auth/callback with a code? =====
       const isCallbackPath = location.pathname.endsWith('/auth/callback') ||
                              location.pathname.endsWith('/auth/callback/');
       const params = new URLSearchParams(location.search);
@@ -91,27 +90,21 @@
       if (isCallbackPath) {
         log(`Callback path detected: ${location.pathname}`);
         log(`Has code: ${hasCode}`);
-
         if (hasCode) {
           try {
-            // Explicit exchange (reliable on iOS)
-            const { data, error } = await supabase.auth.exchangeCodeForSession(params.get('code'));
+            const { error } = await supabase.auth.exchangeCodeForSession(params.get('code'));
             if (error) throw error;
             log('Code exchanged for session ✅', true);
           } catch (e) {
             log(`exchangeCodeForSession error: ${e.message || e}`, false, true);
           }
         }
-
-        // Clean up URL, go back to app root
         const dest = `${window.location.origin}${BASE_PATH}/`;
         log(`Redirecting to app: ${dest}`);
         window.location.replace(dest);
-        // Stop boot any further on callback page
         throw new Error('Callback handled; stopping further boot');
       }
 
-      // ===== not callback: show current session if any =====
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user?.email) {
         log('Existing session found ✅', true);
@@ -121,7 +114,6 @@
         setAuthed(null);
       }
 
-      // ===== UI handlers =====
       document.getElementById('send-link').onclick = async () => {
         const email = (document.getElementById('email').value || '').trim();
         if (!email) return log('Enter an email first.', false, true);
@@ -147,7 +139,6 @@
             }
           });
           if (error) throw error;
-          // Supabase will redirect; no further action.
         } catch (e) {
           log(`Google OAuth error: ${e.message || e}`, false, true);
         }
