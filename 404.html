@@ -53,7 +53,7 @@
     __ok('Module script starting…');
 
     // ====== IMPORTANT: GitHub Pages subpath ======
-    const BASE_PATH = '/ivory-command-center';
+    const mod = await import(`${BASE_PATH}/supabase.js?v=9`);
 
     function callbackUrl() {
       return `${window.location.origin}${BASE_PATH}/auth/callback`;
