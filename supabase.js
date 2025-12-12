@@ -1,7 +1,16 @@
-// supabase.js
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+<script type="module">
+// supabase.js (ES module)
+// 👉 Fill these with YOUR project values (Anon key only — never the service role)
+const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
+const SUPABASE_ANON_KEY = 'YOUR_PUBLIC_ANON_KEY';
 
-const SUPABASE_URL = 'https://wlzjymtugtovmitkkjsw.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indsemp5bXR1Z3Rvdm1pdGtranN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMyNjk4MzgsImV4cCI6MjA3ODg0NTgzOH0.vnHmV1GA--NXLLMWgetoS_AqZFYbHg2gWzMmQAncaME'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true, // important for PKCE exchange on /auth/callback
+  },
+});
+</script>
