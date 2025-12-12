@@ -26,19 +26,31 @@
 
     <hr style="margin:24px 0;">
 
-    <!-- Put your tracker UI below… for now a placeholder -->
+    <!-- Placeholder for the tracker UI we’ll wire next -->
     <h2>🎵 Music Tracker</h2>
     <p>Auth works. Drop your songs/tracker UI here next.</p>
   </div>
 
   <p id="status" style="margin-top:16px; min-height:1.2em;"></p>
 
+  <!-- Supabase client -->
   <script type="module">
+    // Load client
     import { supabase } from './supabase.js';
 
-    const statusEl = document.getElementById('status');
-    const authPanel = document.getElementById('auth-panel');
-    const appPanel  = document.getElementById('app');
+    // ====== IMPORTANT: your GitHub Pages subpath ======
+    // If you move to a root domain later, set BASE_PATH = ''.
+    const BASE_PATH = '/ivory-command-center';
+
+    // Build the callback URL used by Magic Link + Google OAuth
+    function callbackUrl() {
+      return `${window.location.origin}${BASE_PATH}/auth/callback`;
+    }
+
+    // Elements
+    const statusEl   = document.getElementById('status');
+    const authPanel  = document.getElementById('auth-panel');
+    const appPanel   = document.getElementById('app');
     const userEmailEl = document.getElementById('user-email');
 
     const setStatus = (msg) => statusEl.textContent = msg ?? '';
@@ -48,44 +60,39 @@
       const email = document.getElementById('email').value.trim();
       if (!email) return setStatus('Enter an email first.');
 
-      // The page we’ll bounce back to after the link is clicked:
-      const redirectTo = `${window.location.origin}/auth/callback`;
-
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { emailRedirectTo: redirectTo },
+        options: { emailRedirectTo: callbackUrl() },
       });
+
       if (error) setStatus(`Magic link error: ${error.message}`);
       else setStatus('Check your email for the magic link.');
     });
 
     // ----- Google OAuth -----
     document.getElementById('google-btn').addEventListener('click', async () => {
-      const redirectTo = `${window.location.origin}/auth/callback`;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo },
+        options: { redirectTo: callbackUrl() },
       });
       if (error) setStatus(`Google sign-in error: ${error.message}`);
-      // On success, the browser will redirect (PKCE flow)
+      // On success, browser redirects to /auth/callback with ?code=...
     });
 
     // ----- Handle PKCE callback (email & OAuth) -----
-    // When we land on /auth/callback with ?code=..., exchange it for a session.
     async function handleCallbackIfNeeded() {
-      const url = new URL(window.location.href);
-      const onCallbackPath = window.location.pathname === '/auth/callback';
-      const hasCode = url.searchParams.get('code');
+      const onCallbackPath = window.location.pathname === `${BASE_PATH}/auth/callback`;
+      const hasCode = new URL(window.location.href).searchParams.get('code');
 
       if (onCallbackPath && hasCode) {
         setStatus('Finalizing sign-in…');
-        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href);
         if (error) {
           setStatus(`Session exchange failed: ${error.message}`);
           return;
         }
-        // Strip query params after exchange
-        window.history.replaceState({}, '', '/');
+        // Strip query params and send to app root (under the base path)
+        window.history.replaceState({}, '', `${BASE_PATH}/`);
         setStatus('');
       }
     }
@@ -116,6 +123,12 @@
     // Boot:
     await handleCallbackIfNeeded();
     await refreshUI();
+
+    // // (Optional) quick debug in DevTools
+    // supabase.auth.onAuthStateChange((event, session) => {
+    //   console.log('[auth change]', event, session?.user?.email);
+    // });
+    // console.log('[origin]', window.location.origin, '[path]', window.location.pathname);
   </script>
 </body>
 </html>
