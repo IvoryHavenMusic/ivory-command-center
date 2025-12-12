@@ -2,194 +2,120 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ivory Command Center — Music Tracker</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 24px; }
-    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; max-width: 640px; }
-    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
-    label { font-size: 14px; color: #374151; }
-    input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
-    button { border: 0; border-radius: 6px; padding: 10px 14px; cursor: pointer; }
-    .primary { background:#111827; color:#fff; }
-    .ghost { background: #f3f4f6; color:#111827; }
-    .hint { display:block; margin-top:8px; color:#6b7280; min-height:18px; }
-    .tabs { display:flex; gap:10px; margin:14px 0; }
-    .tab { padding:8px 10px; border-radius:6px; background:#f3f4f6; }
-    .danger { color:#b91c1c; }
-  </style>
-  <!-- Supabase JS (v2) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>Ivory Tracker — Auth</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
-<body>
+<body style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; max-width: 640px; margin: 40px auto; padding: 0 16px;">
+  <h1>Ivory Tracker Login</h1>
 
-  <h1>Ivory Command Center — Music Tracker</h1>
+  <!-- Auth UI -->
+  <div id="auth-panel">
+    <p>Sign in with a magic link:</p>
+    <input id="email" type="email" placeholder="your@email.com" style="padding:8px; width:100%; max-width: 420px;">
+    <button id="email-btn" style="padding:10px 14px; margin-left: 8px; margin-top: 8px;">Send Magic Link</button>
 
-  <!-- AUTH -->
-  <div id="authCard" class="card">
-    <div class="row">
-      <div>
-        <label>Email</label>
-        <input id="email" type="email" placeholder="you@example.com" />
-      </div>
-      <div>
-        <label>Password</label>
-        <input id="password" type="password" placeholder="••••••••" />
-      </div>
-    </div>
+    <div style="margin: 18px 0; opacity:.6;">— or —</div>
 
-    <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
-      <button class="primary" id="signInBtn">Sign in</button>
-      <button class="ghost" id="signUpBtn">Create account</button>
-      <span class="hint" id="authHint"></span>
-    </div>
-
-    <div style="margin-top:15px; display:flex; justify-content:flex-start;">
-      <button id="googleBtn" class="primary" style="background:#4285F4; color:white;">
-        Sign in with Google
-      </button>
-    </div>
+    <button id="google-btn" style="padding:10px 14px;">Continue with Google</button>
   </div>
 
-  <!-- APP (hidden until signed in) -->
-  <div id="app" class="card" style="display:none; margin-top:16px;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div id="authState">Signed in</div>
-      <button id="signOutBtn" class="ghost">Sign out</button>
-    </div>
-    <div class="tabs" style="margin-top:10px;">
-      <div class="tab" data-tab="songs">Songs</div>
-      <!-- add more tabs later -->
-    </div>
-    <div id="content">
-      <p>Welcome back, pilot. Your dashboard goes here. 🚀</p>
-    </div>
+  <!-- App UI (hidden until authenticated) -->
+  <div id="app" style="display:none; margin-top:24px;">
+    <p>Signed in as <strong id="user-email"></strong></p>
+    <button id="signout-btn" style="padding:8px 12px;">Sign out</button>
+
+    <hr style="margin:24px 0;">
+
+    <!-- Put your tracker UI below… for now a placeholder -->
+    <h2>🎵 Music Tracker</h2>
+    <p>Auth works. Drop your songs/tracker UI here next.</p>
   </div>
 
-  <script>
-    // -------------------------------
-    // Supabase client initialization
-    // -------------------------------
-    // If you already create `sb` elsewhere, this won't override it.
-    if (typeof window.sb === 'undefined') {
-      const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';       // <- replace
-      const SUPABASE_ANON_KEY = 'YOUR-PUBLIC-ANON-KEY';                   // <- replace
-      window.sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  <p id="status" style="margin-top:16px; min-height:1.2em;"></p>
+
+  <script type="module">
+    import { supabase } from './supabase.js';
+
+    const statusEl = document.getElementById('status');
+    const authPanel = document.getElementById('auth-panel');
+    const appPanel  = document.getElementById('app');
+    const userEmailEl = document.getElementById('user-email');
+
+    const setStatus = (msg) => statusEl.textContent = msg ?? '';
+
+    // ----- Email Magic Link -----
+    document.getElementById('email-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      if (!email) return setStatus('Enter an email first.');
+
+      // The page we’ll bounce back to after the link is clicked:
+      const redirectTo = `${window.location.origin}/auth/callback`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (error) setStatus(`Magic link error: ${error.message}`);
+      else setStatus('Check your email for the magic link.');
+    });
+
+    // ----- Google OAuth -----
+    document.getElementById('google-btn').addEventListener('click', async () => {
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+      });
+      if (error) setStatus(`Google sign-in error: ${error.message}`);
+      // On success, the browser will redirect (PKCE flow)
+    });
+
+    // ----- Handle PKCE callback (email & OAuth) -----
+    // When we land on /auth/callback with ?code=..., exchange it for a session.
+    async function handleCallbackIfNeeded() {
+      const url = new URL(window.location.href);
+      const onCallbackPath = window.location.pathname === '/auth/callback';
+      const hasCode = url.searchParams.get('code');
+
+      if (onCallbackPath && hasCode) {
+        setStatus('Finalizing sign-in…');
+        const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+        if (error) {
+          setStatus(`Session exchange failed: ${error.message}`);
+          return;
+        }
+        // Strip query params after exchange
+        window.history.replaceState({}, '', '/');
+        setStatus('');
+      }
     }
 
-    // -------------------------------
-    // Helpers
-    // -------------------------------
-    const $ = (sel) => document.querySelector(sel);
-    const authCard = $('#authCard');
-    const app = $('#app');
-    const authHint = $('#authHint');
-
-    const setBusy = (btn, busy) => {
-      if (!btn) return;
-      btn.disabled = !!busy;
-      btn.style.opacity = busy ? 0.6 : 1;
-    };
-
-    const showError = (msg) => {
-      authHint.textContent = msg || '';
-      authHint.classList.toggle('danger', !!msg);
-    };
-
-    // -------------------------------
-    // Email/password auth
-    // -------------------------------
-    $('#signInBtn').onclick = async () => {
-      const email = $('#email').value.trim();
-      const password = $('#password').value;
-      if (!email || !password) return showError('Enter email and password.');
-
-      setBusy($('#signInBtn'), true);
-      showError('Signing in…');
-      try {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        showError('');
-        await refreshSessionAndUI();
-      } catch (e) {
-        console.error(e);
-        showError('Sign-in error: ' + e.message);
-      } finally {
-        setBusy($('#signInBtn'), false);
+    // ----- Update UI on session changes -----
+    async function refreshUI() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        userEmailEl.textContent = session.user.email ?? '(no email)';
+        authPanel.style.display = 'none';
+        appPanel.style.display  = '';
+      } else {
+        authPanel.style.display = '';
+        appPanel.style.display  = 'none';
       }
-    };
-
-    $('#signUpBtn').onclick = async () => {
-      const email = $('#email').value.trim();
-      const password = $('#password').value;
-      if (!email || !password) return showError('Enter email and password.');
-
-      setBusy($('#signUpBtn'), true);
-      showError('Creating account…');
-      try {
-        const { error } = await sb.auth.signUp({ email, password });
-        if (error) throw error;
-        showError('Account created. Check your inbox to confirm, then sign in.');
-      } catch (e) {
-        console.error(e);
-        showError('Signup error: ' + e.message);
-      } finally {
-        setBusy($('#signUpBtn'), false);
-      }
-    };
-
-    $('#signOutBtn').onclick = async () => {
-      await sb.auth.signOut();
-      showAuth();
-    };
-
-    // -------------------------------
-    // Google OAuth
-    // -------------------------------
-    $('#googleBtn').onclick = async () => {
-      try {
-        const { error } = await sb.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: 'https://ivoryhavenmusic.github.io/ivory-command-center/'
-          }
-        });
-        if (error) throw error;
-      } catch (error) {
-        console.error(error);
-        alert('Google sign-in error: ' + error.message);
-      }
-    };
-
-    // -------------------------------
-    // Session/UI management
-    // -------------------------------
-    const showAuth = () => {
-      authCard.style.display = '';
-      app.style.display = 'none';
-      $('#authState').textContent = 'Signed out';
-    };
-
-    const showApp = () => {
-      authCard.style.display = 'none';
-      app.style.display = '';
-      $('#authState').textContent = 'Signed in';
-      showError('');
-    };
-
-    async function refreshSessionAndUI() {
-      const { data: { session } } = await sb.auth.getSession();
-      if (session) showApp(); else showAuth();
     }
 
-    // First load
-    (async () => {
-      try { await refreshSessionAndUI(); }
-      catch (e) { console.log('Init error:', e.message); }
-    })();
+    supabase.auth.onAuthStateChange((_event, _session) => {
+      refreshUI();
+    });
 
-    // Global error surface (iPad Safari sometimes swallows console)
-    window.addEventListener('error', (e) => { console.log('JS error:', e.message); });
+    // ----- Sign out -----
+    document.getElementById('signout-btn').addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      setStatus('Signed out.');
+    });
+
+    // Boot:
+    await handleCallbackIfNeeded();
+    await refreshUI();
   </script>
 </body>
 </html>
