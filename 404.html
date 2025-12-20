@@ -1,95 +1,26 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ivory Command Center</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      margin: 32px;
-    }
-    .card {
-      background: #f4f6f8;
-      border-radius: 10px;
-      padding: 16px;
-      max-width: 640px;
-    }
-    button {
-      padding: 10px 14px;
-      border-radius: 6px;
-      border: 1px solid #cbd5e1;
-      background: #eef3ff;
-      cursor: pointer;
-      margin-top: 12px;
-    }
-    .hidden { display: none; }
-  </style>
-</head>
-<body>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Redirecting…</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      (function () {
+        var BASE_PATH = '/ivory-command-center'; // no trailing slash
+        var l = window.location;
 
-<h1>Ivory Command Center</h1>
+        // Preserve the full path/query/hash the user tried to load
+        var full = l.pathname + l.search + l.hash;
 
-<div id="login" class="card">
-  <p>Please sign in to continue.</p>
-  <button id="google">Continue with Google</button>
-</div>
+        // Strip base path if it’s already included
+        if (full.indexOf(BASE_PATH) === 0) full = full.slice(BASE_PATH.length);
+        if (!full.startsWith('/')) full = '/' + full;
 
-<div id="app" class="card hidden">
-  <p>Signed in as <strong id="email"></strong></p>
-  <button id="logout">Sign out</button>
-</div>
-
-<script type="module">
-  const BASE_PATH = '/ivory-command-center';
-  const CALLBACK_PATH = BASE_PATH + '/auth/callback';
-
-  const loginEl = document.getElementById('login');
-  const appEl = document.getElementById('app');
-  const emailEl = document.getElementById('email');
-
-  const { supabase } = await import(`${BASE_PATH}/supabase.js`);
-
-  function showApp(email) {
-    loginEl.classList.add('hidden');
-    appEl.classList.remove('hidden');
-    emailEl.textContent = email;
-  }
-
-  function showLogin() {
-    appEl.classList.add('hidden');
-    loginEl.classList.remove('hidden');
-  }
-
-  // Handle OAuth callback
-  if (location.pathname === CALLBACK_PATH && location.search.includes('code=')) {
-    const params = new URLSearchParams(location.search);
-    const code = params.get('code');
-    await supabase.auth.exchangeCodeForSession(code);
-    location.replace(BASE_PATH);
-  }
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user?.email) {
-    showApp(session.user.email);
-  } else {
-    showLogin();
-  }
-
-  document.getElementById('google').onclick = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: location.origin + CALLBACK_PATH
-      }
-    });
-  };
-
-  document.getElementById('logout').onclick = async () => {
-    await supabase.auth.signOut();
-    showLogin();
-  };
-</script>
-
-</body>
+        // Bounce into index.html with a redirect payload
+        var dest = BASE_PATH + '/?redirect=' + encodeURIComponent(full);
+        window.location.replace(dest);
+      })();
+    </script>
+  </head>
+  <body></body>
 </html>
