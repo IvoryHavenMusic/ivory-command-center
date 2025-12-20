@@ -3,180 +3,199 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ivory Tracker Login (Diagnostic)</title>
-  <link rel="preconnect" href="https://esm.sh">
+  <title>Ivory Command Center</title>
+
   <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:32px}
-    .card{background:#f4f6f8;border-radius:10px;padding:14px 16px;max-width:980px}
-    .ok{color:#0a7a00}.err{color:#b00020}
-    .row{margin:14px 0}
-    input{padding:10px;border:1px solid #cbd5e1;border-radius:6px;width:320px}
-    button{padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#eef3ff;cursor:pointer}
-    .muted{opacity:.7}
-    code{background:#eef2f7;padding:2px 6px;border-radius:6px}
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      margin: 32px;
+      background: #fafafa;
+    }
+    h1 { margin-bottom: 12px }
+    .card {
+      background: #f4f6f8;
+      border-radius: 10px;
+      padding: 16px;
+      max-width: 900px;
+    }
+    .row { margin: 12px 0 }
+    button {
+      padding: 10px 14px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      background: #eef3ff;
+      cursor: pointer;
+    }
+    input {
+      padding: 10px;
+      width: 320px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+    }
+    .ok { color: #0a7a00 }
+    .err { color: #b00020 }
+    .muted { opacity: 0.7 }
   </style>
 </head>
+
 <body>
-  <h1>Ivory Tracker Login (Diagnostic)</h1>
+  <h1>Ivory Command Center</h1>
 
   <div id="status" class="card"></div>
 
-  <div id="auth-panel" class="row">
-    <div class="row">Sign in with a magic link:</div>
-    <input id="email" type="email" placeholder="your@email.com" />
-    <button id="send-link">Send Magic Link</button>
+  <div id="login" class="card">
+    <div class="row"><strong>Sign in</strong></div>
 
-    <div class="row muted">— or —</div>
+    <div class="row">
+      <input id="email" type="email" placeholder="you@email.com" />
+      <button id="magic">Send magic link</button>
+    </div>
+
+    <div class="row muted">or</div>
 
     <button id="google">Continue with Google</button>
   </div>
 
-  <div id="app" class="row" style="display:none">
-    <div class="row">Signed in as: <strong id="user-email"></strong></div>
-    <button id="signout">Sign out</button>
+  <div id="app" class="card" style="display:none">
+    <div class="row">Signed in as <strong id="user-email"></strong></div>
+    <button id="logout">Sign out</button>
   </div>
 
   <script type="module">
-    // ===== GitHub Pages subpath =====
-    // Your published site is: https://ivoryhavenmusic.github.io/ivory-command-center/
-    const BASE_PATH = '/ivory-command-center';
+    /* ==============================
+       CONFIG – DO NOT GUESS
+    ============================== */
 
-    // ===== helpers =====
-    const statusEl = document.getElementById('status');
-    const authPanel = document.getElementById('auth-panel');
-    const appPanel  = document.getElementById('app');
+    const BASE_PATH = '/ivory-command-center';
+    const CALLBACK_PATH = BASE_PATH + '/auth/callback';
+    const HOME_PATH = BASE_PATH + '/index.html';
+
+    /* ==============================
+       DOM
+    ============================== */
+
+    const status = document.getElementById('status');
+    const login = document.getElementById('login');
+    const app = document.getElementById('app');
     const userEmail = document.getElementById('user-email');
 
-    const log = (msg, ok=false, err=false) => {
-      const cls = err ? 'err' : ok ? 'ok' : '';
-      statusEl.innerHTML += `<div class="${cls}">${msg}</div>`;
+    const log = (msg, cls = '') => {
+      const d = document.createElement('div');
+      if (cls) d.className = cls;
+      d.textContent = msg;
+      status.appendChild(d);
     };
 
-    const setAuthed = (email) => {
-      if (email) {
-        authPanel.style.display = 'none';
-        appPanel.style.display = '';
-        userEmail.textContent = email;
+    const showAuthed = (email) => {
+      login.style.display = 'none';
+      app.style.display = '';
+      userEmail.textContent = email;
+    };
+
+    const showLogin = () => {
+      app.style.display = 'none';
+      login.style.display = '';
+      userEmail.textContent = '';
+    };
+
+    /* ==============================
+       LOAD SUPABASE (ABSOLUTE)
+    ============================== */
+
+    const supabaseModuleUrl =
+      `${window.location.origin}${BASE_PATH}/supabase.js`;
+
+    const { supabase } = await import(supabaseModuleUrl);
+    log('Supabase loaded', 'ok');
+
+    /* ==============================
+       AUTH STATE
+    ============================== */
+
+    supabase.auth.onAuthStateChange((event, session) => {
+      log(`Auth event: ${event}`);
+      if (session?.user?.email) {
+        showAuthed(session.user.email);
       } else {
-        appPanel.style.display = 'none';
-        authPanel.style.display = '';
-        userEmail.textContent = '';
+        showLogin();
       }
-    };
+    });
 
-    // IMPORTANT: Use the repo root as the OAuth redirect target.
-    // This avoids GitHub Pages 404 rewrites breaking query strings on deep routes.
-    const callbackUrl = () => `${window.location.origin}${BASE_PATH}/`;
+    /* ==============================
+       CALLBACK HANDLER
+    ============================== */
 
-    // Remove OAuth params from URL after exchange so refreshes are clean
-    const cleanUrl = () => `${window.location.origin}${BASE_PATH}/`;
+    const isCallback = window.location.pathname === CALLBACK_PATH;
+    const params = new URLSearchParams(window.location.search);
 
-    // ===== page boot =====
-    log('Diag: page loaded');
-    log(`Path: <code>${location.pathname}</code>`);
-    log(`Search: <code>${location.search || '(none)'}</code>`);
+    if (isCallback && params.has('code')) {
+      log('Handling OAuth callback…');
 
-    try {
-      log('Module script starting…');
+      const { error } = await supabase.auth.exchangeCodeForSession(
+        params.get('code')
+      );
 
-      // Cache buster so GitHub Pages doesn’t serve an old supabase.js
-      const v = Date.now().toString().slice(-6);
+      if (error) {
+        log(error.message, 'err');
+      } else {
+        log('Session established', 'ok');
+      }
 
-      // Absolute import so it works regardless of current path
-      const importUrl = `${BASE_PATH}/supabase.js?v=${v}`;
-      const mod = await import(importUrl);
+      window.location.replace(
+        window.location.origin + HOME_PATH
+      );
+      return;
+    }
 
-      log(`Import URL: <code>${new URL(importUrl, location.origin)}</code>`);
-      const { supabase } = mod;
-      log('Supabase imported OK ✅', true);
+    /* ==============================
+       SESSION CHECK
+    ============================== */
 
-      supabase.auth.onAuthStateChange((event, session) => {
-        log(`[auth] ${event}`);
-        if (session?.user?.email) setAuthed(session.user.email);
+    const { data } = await supabase.auth.getSession();
+
+    if (data.session?.user?.email) {
+      log('Existing session found', 'ok');
+      showAuthed(data.session.user.email);
+    } else {
+      log('No session');
+      showLogin();
+    }
+
+    /* ==============================
+       ACTIONS
+    ============================== */
+
+    document.getElementById('magic').onclick = async () => {
+      const email = document.getElementById('email').value.trim();
+      if (!email) return log('Enter an email', 'err');
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo:
+            window.location.origin + CALLBACK_PATH
+        }
       });
 
-      // ---- Handle OAuth code on ROOT (this is the key fix) ----
-      const params = new URLSearchParams(location.search);
-      const hasCode = params.has('code');
-      const hasError = params.has('error') || params.has('error_description');
+      if (error) log(error.message, 'err');
+      else log('Magic link sent', 'ok');
+    };
 
-      if (hasError) {
-        log(`OAuth returned error: <code>${params.get('error') || ''}</code>`, false, true);
-        const desc = params.get('error_description');
-        if (desc) log(`Details: <code>${desc}</code>`, false, true);
-      }
-
-      if (hasCode) {
-        log('OAuth code detected on root ✅', true);
-        try {
-          // Best practice: let supabase read the full URL for PKCE code exchange
-          const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (error) throw error;
-
-          const email = data?.session?.user?.email;
-          log(`Code exchanged for session ✅ ${email ? `(user: ${email})` : ''}`, true);
-
-          // Clean the URL so refresh doesn't re-run exchange
-          window.history.replaceState({}, document.title, cleanUrl());
-        } catch (e) {
-          log(`exchangeCodeForSession error: ${e?.message || e}`, false, true);
+    document.getElementById('google').onclick = async () => {
+      await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo:
+            window.location.origin + CALLBACK_PATH
         }
-      }
+      });
+    };
 
-      // Check if a session already exists (after exchange or from previous login)
-      const { data: { session }, error: sessErr } = await supabase.auth.getSession();
-      if (sessErr) log(`getSession error: ${sessErr.message}`, false, true);
-
-      if (session?.user?.email) {
-        log('Existing session found ✅', true);
-        setAuthed(session.user.email);
-      } else {
-        log('No session found');
-        setAuthed(null);
-      }
-
-      // ---- Magic link ----
-      document.getElementById('send-link').onclick = async () => {
-        const email = (document.getElementById('email').value || '').trim();
-        if (!email) return log('Enter an email first.', false, true);
-        try {
-          const { error } = await supabase.auth.signInWithOtp({
-            email,
-            options: { emailRedirectTo: callbackUrl() }
-          });
-          if (error) throw error;
-          log('Magic link sent. Check your email ✅', true);
-        } catch (e) {
-          log(`Magic link error: ${e?.message || e}`, false, true);
-        }
-      };
-
-      // ---- Google OAuth ----
-      document.getElementById('google').onclick = async () => {
-        try {
-          const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'google',
-            options: {
-              redirectTo: callbackUrl(),
-              queryParams: { prompt: 'consent', access_type: 'offline' }
-            }
-          });
-          if (error) throw error;
-        } catch (e) {
-          log(`Google OAuth error: ${e?.message || e}`, false, true);
-        }
-      };
-
-      // ---- Sign out ----
-      document.getElementById('signout').onclick = async () => {
-        await supabase.auth.signOut();
-        setAuthed(null);
-        log('Signed out.');
-      };
-
-    } catch (e) {
-      log(`Boot error: ${e?.message || e}`, false, true);
-    }
+    document.getElementById('logout').onclick = async () => {
+      await supabase.auth.signOut();
+      showLogin();
+      log('Signed out');
+    };
   </script>
 </body>
 </html>
