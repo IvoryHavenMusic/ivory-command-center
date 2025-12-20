@@ -13,7 +13,7 @@
       background: #f4f6f8;
       border-radius: 10px;
       padding: 16px;
-      max-width: 640px;
+      max-width: 720px;
     }
     button {
       padding: 10px 14px;
@@ -24,11 +24,19 @@
       margin-top: 12px;
     }
     .hidden { display: none; }
+    .muted { opacity: .75; }
+    .ok { color: #0a7a00; }
+    .err { color: #b00020; }
+    code { background: #eef2ff; padding: 2px 6px; border-radius: 6px; }
   </style>
 </head>
 <body>
 
 <h1>Ivory Command Center</h1>
+
+<div id="status" class="card muted" style="margin-bottom:16px">
+  <div>Booting…</div>
+</div>
 
 <div id="login" class="card">
   <p>Please sign in to continue.</p>
@@ -41,54 +49,156 @@
 </div>
 
 <script type="module">
+  // ====== CONFIG ======
   const BASE_PATH = '/ivory-command-center';
-  const CALLBACK_PATH = BASE_PATH + '/auth/callback';
+  const CALLBACK_PATH = BASE_PATH + '/auth/callback'; // no trailing slash
+  const CALLBACK_URL  = location.origin + CALLBACK_PATH;
 
-  const loginEl = document.getElementById('login');
-  const appEl = document.getElementById('app');
-  const emailEl = document.getElementById('email');
+  // ====== UI helpers ======
+  const statusEl = document.getElementById('status');
+  const loginEl  = document.getElementById('login');
+  const appEl    = document.getElementById('app');
+  const emailEl  = document.getElementById('email');
 
-  const { supabase } = await import(`${BASE_PATH}/supabase.js`);
+  const log = (msg, kind = '') => {
+    const cls = kind === 'ok' ? 'ok' : kind === 'err' ? 'err' : '';
+    statusEl.innerHTML += `<div class="${cls}">${msg}</div>`;
+  };
 
   function showApp(email) {
     loginEl.classList.add('hidden');
     appEl.classList.remove('hidden');
-    emailEl.textContent = email;
+    emailEl.textContent = email || '';
   }
 
   function showLogin() {
     appEl.classList.add('hidden');
     loginEl.classList.remove('hidden');
+    emailEl.textContent = '';
   }
 
-  // Handle OAuth callback
-  if (location.pathname === CALLBACK_PATH && location.search.includes('code=')) {
-    const params = new URLSearchParams(location.search);
-    const code = params.get('code');
-    await supabase.auth.exchangeCodeForSession(code);
-    location.replace(BASE_PATH);
-  }
+  // ====== 1) Handle GitHub Pages 404-style redirects ======
+  // If 404.html redirected you to /?redirect=/ivory-command-center/auth/callback?code=...
+  // then unpack it back into a real path + query so Supabase can see the code.
+  (function unpackRedirectParam() {
+    const url = new URL(location.href);
+    const redirect = url.searchParams.get('redirect');
+    if (!redirect) return;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user?.email) {
-    showApp(session.user.email);
-  } else {
-    showLogin();
-  }
+    // Avoid loops: only unpack when we're sitting at the base route (/, /index.html, /ivory-command-center, etc.)
+    const p = url.pathname;
+    const looksLikeAppRoot =
+      p === BASE_PATH ||
+      p === BASE_PATH + '/' ||
+      p === BASE_PATH + '/index.html' ||
+      p === '/';
 
-  document.getElementById('google').onclick = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: location.origin + CALLBACK_PATH
-      }
+    if (!looksLikeAppRoot) return;
+
+    try {
+      const decoded = decodeURIComponent(redirect);
+
+      // decoded is expected to be an absolute path starting with /ivory-command-center/...
+      // It may also already include its own ?code=...&state=...
+      const targetUrl = decoded.startsWith('http')
+        ? decoded
+        : (location.origin + decoded);
+
+      log(`Unpacking redirect → <code>${decoded}</code>`, 'ok');
+      location.replace(targetUrl);
+    } catch (e) {
+      log(`Failed to unpack redirect param: ${e?.message || e}`, 'err');
+    }
+  })();
+
+  // ====== 2) Import Supabase reliably on subpaths ======
+  try {
+    const bust = Date.now().toString().slice(-6);
+    const { supabase } = await import(`${BASE_PATH}/supabase.js?v=${bust}`);
+    log('Supabase module loaded ✅', 'ok');
+
+    // Keep UI in sync with auth state
+    supabase.auth.onAuthStateChange((event, session) => {
+      log(`Auth event: <code>${event}</code>`);
+      const email = session?.user?.email;
+      if (email) showApp(email);
+      else showLogin();
     });
-  };
 
-  document.getElementById('logout').onclick = async () => {
-    await supabase.auth.signOut();
-    showLogin();
-  };
+    // ====== 3) Handle OAuth callback (Supabase v2) ======
+    const isCallback =
+      location.pathname === CALLBACK_PATH ||
+      location.pathname === CALLBACK_PATH + '/' ||
+      location.pathname.endsWith('/auth/callback') ||
+      location.pathname.endsWith('/auth/callback/');
+
+    const hasCode = new URLSearchParams(location.search).has('code');
+
+    if (isCallback) {
+      log(`Callback path detected: <code>${location.pathname}</code>`, 'ok');
+      log(`Has code: <code>${hasCode}</code>`);
+
+      if (hasCode) {
+        try {
+          // IMPORTANT: Supabase v2 expects to read the code from the URL itself.
+          const { error } = await supabase.auth.exchangeCodeForSession();
+          if (error) throw error;
+          log('Code exchanged for session ✅', 'ok');
+        } catch (e) {
+          log(`exchangeCodeForSession error: ${e?.message || e}`, 'err');
+        }
+      }
+
+      // Always return to app root after callback
+      location.replace(BASE_PATH + '/');
+      throw new Error('Callback handled (intentional stop).');
+    }
+
+    // ====== 4) Normal boot: show session if present ======
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.email) {
+        log('Existing session found ✅', 'ok');
+        showApp(session.user.email);
+      } else {
+        log('No session found (showing login).');
+        showLogin();
+      }
+    } catch (e) {
+      log(`getSession error: ${e?.message || e}`, 'err');
+      showLogin();
+    }
+
+    // ====== 5) Buttons ======
+    document.getElementById('google').onclick = async () => {
+      try {
+        log(`Starting Google OAuth… redirectTo=<code>${CALLBACK_URL}</code>`);
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: CALLBACK_URL,
+            queryParams: { prompt: 'consent', access_type: 'offline' }
+          }
+        });
+        if (error) throw error;
+      } catch (e) {
+        log(`Google OAuth error: ${e?.message || e}`, 'err');
+      }
+    };
+
+    document.getElementById('logout').onclick = async () => {
+      try {
+        await supabase.auth.signOut();
+        log('Signed out.');
+        showLogin();
+      } catch (e) {
+        log(`Sign out error: ${e?.message || e}`, 'err');
+      }
+    };
+
+  } catch (e) {
+    log(`Boot error: ${e?.message || e}`, 'err');
+  }
 </script>
 
 </body>
