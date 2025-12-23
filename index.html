@@ -2,204 +2,377 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Ivory Command Center</title>
+
   <style>
+    :root {
+      color-scheme: dark light;
+      --bg: #0b0f14;
+      --panel: rgba(255,255,255,0.06);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.68);
+      --line: rgba(255,255,255,0.12);
+      --btn: rgba(255,255,255,0.12);
+      --btnHover: rgba(255,255,255,0.18);
+      --ok: #40d67f;
+      --warn: #ffb020;
+      --err: #ff5d5d;
+    }
+
     body {
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      margin: 32px;
+      margin: 0;
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 30% 10%, rgba(64,214,127,0.14), transparent 60%),
+                  radial-gradient(1200px 600px at 80% 20%, rgba(0,153,255,0.14), transparent 60%),
+                  var(--bg);
+      color: var(--text);
     }
-    .card {
-      background: #f4f6f8;
-      border-radius: 10px;
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 22px 16px 40px;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.2px;
+    }
+
+    .brand p {
+      margin: 6px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      white-space: nowrap;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
       padding: 16px;
-      max-width: 720px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25);
     }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
     button {
-      padding: 10px 14px;
-      border-radius: 6px;
-      border: 1px solid #cbd5e1;
-      background: #eef3ff;
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--btn);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 600;
       cursor: pointer;
-      margin-top: 12px;
     }
-    .hidden { display: none; }
-    .muted { opacity: .75; }
-    .ok { color: #0a7a00; }
-    .err { color: #b00020; }
-    code { background: #eef2ff; padding: 2px 6px; border-radius: 6px; }
+
+    button:hover { background: var(--btnHover); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .status {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(0,0,0,0.15);
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .status .ok { color: var(--ok); font-weight: 700; }
+    .status .warn { color: var(--warn); font-weight: 700; }
+    .status .err { color: var(--err); font-weight: 700; }
+
+    .hidden { display: none !important; }
+
+    .tiny {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+    }
   </style>
+
+  <!-- Supabase JS (v2) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Your existing config/client (keep this file in repo root) -->
+  <!-- IMPORTANT: This page expects window.SUPABASE_URL and window.SUPABASE_ANON_KEY OR window.supabaseClient -->
+  <script src="supabase.js"></script>
 </head>
+
 <body>
+  <div class="wrap">
+    <div class="header">
+      <div class="brand">
+        <h1>Ivory Command Center</h1>
+        <p>Music release tracker for Ivory Haven + Ivory Ocean</p>
+      </div>
+      <div class="pill" id="pillEnv">Loading…</div>
+    </div>
 
-<h1>Ivory Command Center</h1>
+    <!-- LOGIN PANEL -->
+    <div class="panel" id="loginPanel">
+      <div><strong>Sign in</strong></div>
+      <div class="tiny">
+        If you were getting a 404 on <code>/auth/callback</code>, this build avoids that route entirely.
+      </div>
 
-<div id="status" class="card muted" style="margin-bottom:16px">
-  <div>Booting…</div>
-</div>
+      <div class="row">
+        <button id="btnGoogle">Continue with Google</button>
+      </div>
 
-<div id="login" class="card">
-  <p>Please sign in to continue.</p>
-  <button id="google">Continue with Google</button>
-</div>
+      <div class="status" id="statusBox">Initializing…</div>
 
-<div id="app" class="card hidden">
-  <p>Signed in as <strong id="email"></strong></p>
-  <button id="logout">Sign out</button>
-</div>
+      <div class="tiny">
+        Tip: first test in a private/incognito tab so Safari isn’t holding onto old redirects.
+      </div>
+    </div>
 
-<script type="module">
-  // ====== CONFIG ======
-  const BASE_PATH = '/ivory-command-center';
-  const CALLBACK_PATH = BASE_PATH + '/auth/callback'; // no trailing slash
-  const CALLBACK_URL  = location.origin + CALLBACK_PATH;
+    <!-- APP PANEL -->
+    <div class="panel hidden" id="appPanel">
+      <div class="header" style="margin-bottom: 10px;">
+        <div>
+          <div><strong>Welcome back</strong></div>
+          <div class="tiny" id="userLine"></div>
+        </div>
+        <div class="row" style="margin:0;">
+          <button id="btnLogout">Logout</button>
+        </div>
+      </div>
 
-  // ====== UI helpers ======
-  const statusEl = document.getElementById('status');
-  const loginEl  = document.getElementById('login');
-  const appEl    = document.getElementById('app');
-  const emailEl  = document.getElementById('email');
+      <!-- Your app mounts here -->
+      <div id="appRoot"></div>
+    </div>
+  </div>
 
-  const log = (msg, kind = '') => {
-    const cls = kind === 'ok' ? 'ok' : kind === 'err' ? 'err' : '';
-    statusEl.innerHTML += `<div class="${cls}">${msg}</div>`;
-  };
+  <script>
+    (function () {
+      // ---------- helpers ----------
+      function getRepoBaseUrl() {
+        // Works for:
+        // https://domain/ivory-command-center/
+        // https://domain/ivory-command-center/index.html
+        const origin = window.location.origin;
+        const parts = window.location.pathname.split('/').filter(Boolean);
 
-  function showApp(email) {
-    loginEl.classList.add('hidden');
-    appEl.classList.remove('hidden');
-    emailEl.textContent = email || '';
-  }
+        // repo pages base = /<repo>/
+        // If your path is /ivory-command-center/... then parts[0] is repo
+        const repo = parts.length ? parts[0] : "";
+        return origin + "/" + repo + "/";
+      }
 
-  function showLogin() {
-    appEl.classList.add('hidden');
-    loginEl.classList.remove('hidden');
-    emailEl.textContent = '';
-  }
+      function setStatus(html) {
+        document.getElementById("statusBox").innerHTML = html;
+      }
 
-  // ====== 1) Handle GitHub Pages 404-style redirects ======
-  // If 404.html redirected you to /?redirect=/ivory-command-center/auth/callback?code=...
-  // then unpack it back into a real path + query so Supabase can see the code.
-  (function unpackRedirectParam() {
-    const url = new URL(location.href);
-    const redirect = url.searchParams.get('redirect');
-    if (!redirect) return;
+      function setPill(text) {
+        document.getElementById("pillEnv").textContent = text;
+      }
 
-    // Avoid loops: only unpack when we're sitting at the base route (/, /index.html, /ivory-command-center, etc.)
-    const p = url.pathname;
-    const looksLikeAppRoot =
-      p === BASE_PATH ||
-      p === BASE_PATH + '/' ||
-      p === BASE_PATH + '/index.html' ||
-      p === '/';
+      function showApp(userEmail) {
+        document.getElementById("loginPanel").classList.add("hidden");
+        document.getElementById("appPanel").classList.remove("hidden");
+        document.getElementById("userLine").textContent = userEmail ? ("Signed in as " + userEmail) : "Signed in";
+      }
 
-    if (!looksLikeAppRoot) return;
+      function showLogin() {
+        document.getElementById("appPanel").classList.add("hidden");
+        document.getElementById("loginPanel").classList.remove("hidden");
+      }
 
-    try {
-      const decoded = decodeURIComponent(redirect);
+      // ---------- init ----------
+      const baseUrl = getRepoBaseUrl();
+      setPill(baseUrl.replace("https://", "").replace("http://", ""));
 
-      // decoded is expected to be an absolute path starting with /ivory-command-center/...
-      // It may also already include its own ?code=...&state=...
-      const targetUrl = decoded.startsWith('http')
-        ? decoded
-        : (location.origin + decoded);
+      // Build a Supabase client from either:
+      // 1) window.supabaseClient (your supabase.js already created it), OR
+      // 2) window.SUPABASE_URL + window.SUPABASE_ANON_KEY (your supabase.js sets these), OR
+      // 3) fall back to error with clear instruction
+      let supabaseClient = window.supabaseClient;
 
-      log(`Unpacking redirect → <code>${decoded}</code>`, 'ok');
-      location.replace(targetUrl);
-    } catch (e) {
-      log(`Failed to unpack redirect param: ${e?.message || e}`, 'err');
-    }
-  })();
+      if (!supabaseClient && window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase) {
+        supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+        window.supabaseClient = supabaseClient;
+      }
 
-  // ====== 2) Import Supabase reliably on subpaths ======
-  try {
-    const bust = Date.now().toString().slice(-6);
-    const { supabase } = await import(`${BASE_PATH}/supabase.js?v=${bust}`);
-    log('Supabase module loaded ✅', 'ok');
+      if (!supabaseClient) {
+        setStatus(
+          "<span class='err'>Missing Supabase client.</span><br>" +
+          "Your <code>supabase.js</code> must define either:<br>" +
+          "• <code>window.supabaseClient</code> (preferred), or<br>" +
+          "• <code>window.SUPABASE_URL</code> and <code>window.SUPABASE_ANON_KEY</code>.<br><br>" +
+          "Once that’s set, refresh this page."
+        );
+        document.getElementById("btnGoogle").disabled = true;
+        return;
+      }
 
-    // Keep UI in sync with auth state
-    supabase.auth.onAuthStateChange((event, session) => {
-      log(`Auth event: <code>${event}</code>`);
-      const email = session?.user?.email;
-      if (email) showApp(email);
-      else showLogin();
-    });
+      // If we returned from OAuth, Supabase will parse the URL hash.
+      // After session is established, we clean the URL back to the base (prevents weirdness/bookmarking token URLs).
+      async function cleanUrlIfNeeded() {
+        const hasTokenInHash = window.location.hash && window.location.hash.includes("access_token=");
+        if (!hasTokenInHash) return;
 
-    // ====== 3) Handle OAuth callback (Supabase v2) ======
-    const isCallback =
-      location.pathname === CALLBACK_PATH ||
-      location.pathname === CALLBACK_PATH + '/' ||
-      location.pathname.endsWith('/auth/callback') ||
-      location.pathname.endsWith('/auth/callback/');
-
-    const hasCode = new URLSearchParams(location.search).has('code');
-
-    if (isCallback) {
-      log(`Callback path detected: <code>${location.pathname}</code>`, 'ok');
-      log(`Has code: <code>${hasCode}</code>`);
-
-      if (hasCode) {
+        // Wait a moment so supabase-js can read it
+        await new Promise(r => setTimeout(r, 50));
         try {
-          // IMPORTANT: Supabase v2 expects to read the code from the URL itself.
-          const { error } = await supabase.auth.exchangeCodeForSession();
-          if (error) throw error;
-          log('Code exchanged for session ✅', 'ok');
-        } catch (e) {
-          log(`exchangeCodeForSession error: ${e?.message || e}`, 'err');
+          // If session exists, strip hash
+          const { data } = await supabaseClient.auth.getSession();
+          if (data && data.session) {
+            history.replaceState({}, document.title, baseUrl);
+          }
+        } catch (_) {
+          // no-op
         }
       }
 
-      // Always return to app root after callback
-      location.replace(BASE_PATH + '/');
-      throw new Error('Callback handled (intentional stop).');
-    }
+      // Wire buttons
+      document.getElementById("btnGoogle").addEventListener("click", async () => {
+        try {
+          setStatus("<span class='warn'>Redirecting to Google…</span>");
+          const { error } = await supabaseClient.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+              // CRITICAL: repo base URL, NOT /auth/callback
+              redirectTo: baseUrl
+            }
+          });
+          if (error) throw error;
+        } catch (e) {
+          setStatus("<span class='err'>Login failed:</span> " + (e && e.message ? e.message : String(e)));
+        }
+      });
 
-    // ====== 4) Normal boot: show session if present ======
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.email) {
-        log('Existing session found ✅', 'ok');
-        showApp(session.user.email);
-      } else {
-        log('No session found (showing login).');
-        showLogin();
-      }
-    } catch (e) {
-      log(`getSession error: ${e?.message || e}`, 'err');
-      showLogin();
-    }
+      document.getElementById("btnLogout").addEventListener("click", async () => {
+        try {
+          await supabaseClient.auth.signOut();
+          showLogin();
+          setStatus("<span class='ok'>Signed out.</span>");
+        } catch (e) {
+          setStatus("<span class='err'>Logout failed:</span> " + (e && e.message ? e.message : String(e)));
+        }
+      });
 
-    // ====== 5) Buttons ======
-    document.getElementById('google').onclick = async () => {
-      try {
-        log(`Starting Google OAuth… redirectTo=<code>${CALLBACK_URL}</code>`);
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: CALLBACK_URL,
-            queryParams: { prompt: 'consent', access_type: 'offline' }
+      // Start up: check session
+      (async function bootstrap() {
+        setStatus("Checking session…");
+        await cleanUrlIfNeeded();
+
+        try {
+          const { data, error } = await supabaseClient.auth.getSession();
+          if (error) throw error;
+
+          const session = data && data.session ? data.session : null;
+          if (session && session.user) {
+            setStatus("<span class='ok'>Authenticated.</span> Loading app…");
+            showApp(session.user.email);
+
+            // Load your existing app scripts AFTER auth is confirmed
+            // (These are optional. Keep/remove based on what your tracker needs.)
+            loadAppScripts();
+          } else {
+            setStatus(
+              "<span class='warn'>Not signed in yet.</span><br>" +
+              "When you click Google, it will redirect back to:<br><code>" + baseUrl + "</code>"
+            );
+            showLogin();
           }
-        });
-        if (error) throw error;
-      } catch (e) {
-        log(`Google OAuth error: ${e?.message || e}`, 'err');
+
+          // Listen for changes
+          supabaseClient.auth.onAuthStateChange(async (event, newSession) => {
+            if (event === "SIGNED_IN" && newSession && newSession.user) {
+              await cleanUrlIfNeeded();
+              setStatus("<span class='ok'>Signed in.</span> Loading app…");
+              showApp(newSession.user.email);
+              loadAppScripts();
+            }
+            if (event === "SIGNED_OUT") {
+              showLogin();
+              setStatus("<span class='ok'>Signed out.</span>");
+            }
+          });
+
+        } catch (e) {
+          setStatus("<span class='err'>Init error:</span> " + (e && e.message ? e.message : String(e)));
+        }
+      })();
+
+      // Prevent double-loading scripts
+      let appLoaded = false;
+
+      function loadAppScripts() {
+        if (appLoaded) return;
+        appLoaded = true;
+
+        // If your tracker expects certain IDs, keep #appRoot and mount there.
+
+        // Load existing JS files if they exist in your repo.
+        // If any of these filenames are wrong for your project, remove or rename them here.
+        const scripts = [
+          "database.js",
+          "music-tracker.js"
+        ];
+
+        let i = 0;
+        function next() {
+          if (i >= scripts.length) {
+            // optional: call an init if your tracker exposes one
+            if (window.initMusicTracker) {
+              try { window.initMusicTracker({ rootId: "appRoot" }); } catch (_) {}
+            }
+            return;
+          }
+
+          const src = scripts[i++];
+          const s = document.createElement("script");
+          s.src = src;
+          s.onload = next;
+          s.onerror = () => {
+            // If a file isn't found, we still continue (so the app page doesn't die)
+            const current = document.getElementById("statusBox").innerHTML;
+            setStatus(current + "<br><span class='warn'>Note:</span> Could not load <code>" + src + "</code> (not found).");
+            next();
+          };
+          document.body.appendChild(s);
+        }
+
+        next();
       }
-    };
 
-    document.getElementById('logout').onclick = async () => {
-      try {
-        await supabase.auth.signOut();
-        log('Signed out.');
-        showLogin();
-      } catch (e) {
-        log(`Sign out error: ${e?.message || e}`, 'err');
-      }
-    };
-
-  } catch (e) {
-    log(`Boot error: ${e?.message || e}`, 'err');
-  }
-</script>
-
+    })();
+  </script>
 </body>
 </html>
