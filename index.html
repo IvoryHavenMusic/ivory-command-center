@@ -23,9 +23,10 @@
     body {
       margin: 0;
       font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-      background: radial-gradient(1200px 600px at 30% 10%, rgba(64,214,127,0.14), transparent 60%),
-                  radial-gradient(1200px 600px at 80% 20%, rgba(0,153,255,0.14), transparent 60%),
-                  var(--bg);
+      background:
+        radial-gradient(1200px 600px at 30% 10%, rgba(64,214,127,0.14), transparent 60%),
+        radial-gradient(1200px 600px at 80% 20%, rgba(0,153,255,0.14), transparent 60%),
+        var(--bg);
       color: var(--text);
     }
 
@@ -43,345 +44,145 @@
       margin-bottom: 14px;
     }
 
-    .brand h1 {
-      margin: 0;
-      font-size: 18px;
-      letter-spacing: 0.2px;
-    }
-
-    .brand p {
-      margin: 6px 0 0;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .pill {
-      border: 1px solid var(--line);
-      padding: 8px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      color: var(--muted);
-      background: rgba(255,255,255,0.03);
-      white-space: nowrap;
-    }
-
     .panel {
       border: 1px solid var(--line);
       border-radius: 14px;
       background: var(--panel);
       padding: 16px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.25);
-    }
-
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      margin-top: 10px;
     }
 
     button {
-      appearance: none;
       border: 1px solid var(--line);
       background: var(--btn);
       color: var(--text);
-      padding: 10px 12px;
+      padding: 10px 14px;
       border-radius: 12px;
       font-weight: 600;
       cursor: pointer;
     }
 
     button:hover { background: var(--btnHover); }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
 
     .status {
-      margin-top: 10px;
-      padding: 10px 12px;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      background: rgba(0,0,0,0.15);
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.35;
-      word-break: break-word;
-    }
-
-    .status .ok { color: var(--ok); font-weight: 700; }
-    .status .warn { color: var(--warn); font-weight: 700; }
-    .status .err { color: var(--err); font-weight: 700; }
-
-    .hidden { display: none !important; }
-
-    .tiny {
-      margin-top: 10px;
-      font-size: 12px;
+      margin-top: 12px;
+      font-size: 13px;
+      line-height: 1.4;
       color: var(--muted);
     }
 
-    code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: 12px;
-    }
+    .ok { color: var(--ok); font-weight: 700; }
+    .warn { color: var(--warn); font-weight: 700; }
+    .err { color: var(--err); font-weight: 700; }
+
+    .hidden { display: none; }
   </style>
 
-  <!-- Supabase JS (v2) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- ✅ Supabase UMD browser build (THIS IS THE KEY FIX) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-  <!-- Your existing config/client (keep this file in repo root) -->
+  <!-- ✅ Your non-module Supabase config -->
   <script src="supabase.js"></script>
 </head>
 
 <body>
   <div class="wrap">
     <div class="header">
-      <div class="brand">
-        <h1>Ivory Command Center</h1>
-        <p>Music release tracker for Ivory Haven + Ivory Ocean</p>
-      </div>
-      <div class="pill" id="pillEnv">Loading…</div>
+      <h2>Ivory Command Center</h2>
+      <div id="env"></div>
     </div>
 
-    <!-- LOGIN PANEL -->
     <div class="panel" id="loginPanel">
-      <div><strong>Sign in</strong></div>
-
-      <div class="tiny">
-        This build avoids <code>/auth/callback</code> entirely and uses the repo base URL for OAuth.
-      </div>
-
-      <div class="row">
-        <button id="btnGoogle">Continue with Google</button>
-      </div>
-
-      <div class="status" id="statusBox">Initializing…</div>
-
-      <div class="tiny">
-        Best test: Safari Private tab (so old redirects/cookies don’t haunt you 👻).
-      </div>
+      <p><strong>Sign in</strong></p>
+      <button id="btnGoogle">Continue with Google</button>
+      <div class="status" id="status">Initializing…</div>
     </div>
 
-    <!-- APP PANEL -->
     <div class="panel hidden" id="appPanel">
-      <div class="header" style="margin-bottom: 10px;">
-        <div>
-          <div><strong>Welcome back</strong></div>
-          <div class="tiny" id="userLine"></div>
-        </div>
-        <div class="row" style="margin:0;">
-          <button id="btnLogout">Logout</button>
-        </div>
-      </div>
-
+      <p id="userLine"></p>
+      <button id="btnLogout">Logout</button>
       <div id="appRoot"></div>
-      <div class="status" id="appStatus" style="margin-top:12px;">App not loaded yet.</div>
     </div>
   </div>
 
   <script>
     (function () {
-      // =========================
-      // HARD-LOCK THE REPO NAME
-      // =========================
-      // This is a GitHub Pages PROJECT site, not the user root.
+      // =============================
+      // HARD FIXED PROJECT SETTINGS
+      // =============================
       const REPO = "ivory-command-center";
+      const canonicalBase = location.origin + "/" + REPO;
 
-      // Canonical redirect URL (NO trailing slash) because your Supabase config only accepts that.
-      const canonicalBase = window.location.origin + "/" + REPO;
+      document.getElementById("env").textContent = canonicalBase;
 
-      // Pretty base (with trailing slash) used for human-friendly URL + routing.
-      const prettyBase = canonicalBase + "/";
+      const status = (html) =>
+        document.getElementById("status").innerHTML = html;
 
-      function setStatus(html) {
-        document.getElementById("statusBox").innerHTML = html;
-      }
-
-      function setPill(text) {
-        document.getElementById("pillEnv").textContent = text;
-      }
-
-      function showApp(userEmail) {
+      const showApp = (email) => {
         document.getElementById("loginPanel").classList.add("hidden");
         document.getElementById("appPanel").classList.remove("hidden");
-        document.getElementById("userLine").textContent = userEmail ? ("Signed in as " + userEmail) : "Signed in";
-      }
+        document.getElementById("userLine").textContent = "Signed in as " + email;
+      };
 
-      function showLogin() {
+      const showLogin = () => {
         document.getElementById("appPanel").classList.add("hidden");
         document.getElementById("loginPanel").classList.remove("hidden");
-      }
+      };
 
-      function setAppStatus(html) {
-        document.getElementById("appStatus").innerHTML = html;
-      }
-
-      setPill(prettyBase.replace("https://", "").replace("http://", ""));
-
-      // =========================
-      // Build / acquire Supabase client
-      // =========================
-      let supabaseClient = window.supabaseClient;
-
-      if (!supabaseClient && window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase) {
-        supabaseClient = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-        window.supabaseClient = supabaseClient;
-      }
-
-      if (!supabaseClient) {
-        setStatus(
-          "<span class='err'>Missing Supabase client.</span><br>" +
-          "Your <code>supabase.js</code> must define either:<br>" +
-          "• <code>window.supabaseClient</code> (preferred), or<br>" +
-          "• <code>window.SUPABASE_URL</code> and <code>window.SUPABASE_ANON_KEY</code>.<br><br>" +
-          "Fix that, commit, and refresh."
-        );
+      // =============================
+      // VERIFY SUPABASE
+      // =============================
+      if (!window.supabaseClient) {
+        status("<span class='err'>Supabase client not initialized.</span>");
         document.getElementById("btnGoogle").disabled = true;
         return;
       }
 
-      // =========================
-      // OAuth return handling
-      // =========================
-      async function cleanUrlAfterOAuth() {
-        const hasTokenInHash = window.location.hash && window.location.hash.includes("access_token=");
-        if (!hasTokenInHash) return;
+      const supabase = window.supabaseClient;
 
-        // Give supabase-js a beat to read the hash
-        await new Promise(r => setTimeout(r, 75));
+      // =============================
+      // AUTH BUTTONS
+      // =============================
+      document.getElementById("btnGoogle").onclick = async () => {
+        status("<span class='warn'>Redirecting to Google…</span>");
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo: canonicalBase }
+        });
+        if (error) status("<span class='err'>" + error.message + "</span>");
+      };
 
-        try {
-          const { data } = await supabaseClient.auth.getSession();
-          if (data && data.session) {
-            // Clean the token URL back to the pretty base (with slash)
-            history.replaceState({}, document.title, prettyBase);
-          }
-        } catch (_) {}
-      }
+      document.getElementById("btnLogout").onclick = async () => {
+        await supabase.auth.signOut();
+        showLogin();
+        status("<span class='ok'>Signed out.</span>");
+      };
 
-      // =========================
-      // Buttons
-      // =========================
-      document.getElementById("btnGoogle").addEventListener("click", async () => {
-        try {
-          setStatus("<span class='warn'>Redirecting to Google…</span>");
-
-          const { error } = await supabaseClient.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-              // IMPORTANT: Must exactly match what Supabase will accept (NO trailing slash)
-              redirectTo: canonicalBase
-            }
-          });
-
-          if (error) throw error;
-        } catch (e) {
-          setStatus("<span class='err'>Login failed:</span> " + (e && e.message ? e.message : String(e)));
-        }
-      });
-
-      document.getElementById("btnLogout").addEventListener("click", async () => {
-        try {
-          await supabaseClient.auth.signOut();
+      // =============================
+      // BOOTSTRAP
+      // =============================
+      (async () => {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          showApp(data.session.user.email);
+          status("<span class='ok'>Authenticated.</span>");
+        } else {
           showLogin();
-          setStatus("<span class='ok'>Signed out.</span>");
-        } catch (e) {
-          setStatus("<span class='err'>Logout failed:</span> " + (e && e.message ? e.message : String(e)));
-        }
-      });
-
-      // =========================
-      // Load app scripts reliably (absolute URLs)
-      // =========================
-      let appLoaded = false;
-
-      function loadAppScripts() {
-        if (appLoaded) return;
-        appLoaded = true;
-
-        setAppStatus("<span class='warn'>Loading tracker scripts…</span>");
-
-        const scripts = [
-          "database.js",
-          "music-tracker.js"
-        ];
-
-        let i = 0;
-
-        function next() {
-          if (i >= scripts.length) {
-            setAppStatus("<span class='ok'>Scripts loaded.</span> If the UI is blank, your tracker may need an init hook.");
-            if (window.initMusicTracker) {
-              try {
-                window.initMusicTracker({ rootId: "appRoot" });
-                setAppStatus("<span class='ok'>Tracker initialized.</span>");
-              } catch (e) {
-                setAppStatus("<span class='err'>Tracker init error:</span> " + (e && e.message ? e.message : String(e)));
-              }
-            } else {
-              setAppStatus("<span class='warn'>No init function found.</span> (That’s okay if your tracker auto-runs.)");
-            }
-            return;
-          }
-
-          const src = prettyBase + scripts[i++]; // absolute under repo path
-          const s = document.createElement("script");
-          s.src = src;
-          s.onload = next;
-          s.onerror = () => {
-            const current = document.getElementById("appStatus").innerHTML;
-            setAppStatus(current + "<br><span class='warn'>Could not load:</span> <code>" + src + "</code>");
-            next();
-          };
-          document.body.appendChild(s);
-        }
-
-        next();
-      }
-
-      // =========================
-      // Bootstrap
-      // =========================
-      (async function bootstrap() {
-        setStatus("Checking session…");
-        await cleanUrlAfterOAuth();
-
-        try {
-          const { data, error } = await supabaseClient.auth.getSession();
-          if (error) throw error;
-
-          const session = data && data.session ? data.session : null;
-
-          if (session && session.user) {
-            setStatus("<span class='ok'>Authenticated.</span> Loading app…");
-            showApp(session.user.email);
-            loadAppScripts();
-          } else {
-            showLogin();
-            setStatus(
-              "<span class='warn'>Not signed in yet.</span><br>" +
-              "Google will redirect back to:<br><code>" + canonicalBase + "</code><br>" +
-              "(Then we clean it to: <code>" + prettyBase + "</code>)"
-            );
-          }
-
-          supabaseClient.auth.onAuthStateChange(async (event, newSession) => {
-            if (event === "SIGNED_IN" && newSession && newSession.user) {
-              await cleanUrlAfterOAuth();
-              setStatus("<span class='ok'>Signed in.</span> Loading app…");
-              showApp(newSession.user.email);
-              loadAppScripts();
-            }
-            if (event === "SIGNED_OUT") {
-              showLogin();
-              setStatus("<span class='ok'>Signed out.</span>");
-            }
-          });
-
-        } catch (e) {
-          setStatus("<span class='err'>Init error:</span> " + (e && e.message ? e.message : String(e)));
+          status("<span class='warn'>Not signed in.</span>");
         }
       })();
 
+      supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "SIGNED_IN") {
+          history.replaceState({}, "", canonicalBase);
+          showApp(session.user.email);
+          status("<span class='ok'>Signed in.</span>");
+        }
+        if (event === "SIGNED_OUT") {
+          showLogin();
+          status("<span class='ok'>Signed out.</span>");
+        }
+      });
     })();
   </script>
 </body>
