@@ -20,68 +20,43 @@
       --err: #ff5d5d;
     }
 
-    body {
-      margin: 0;
-      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    body{
+      margin:0;
+      font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
       background:
         radial-gradient(1200px 600px at 30% 10%, rgba(64,214,127,0.14), transparent 60%),
         radial-gradient(1200px 600px at 80% 20%, rgba(0,153,255,0.14), transparent 60%),
         var(--bg);
-      color: var(--text);
+      color:var(--text);
     }
 
-    .wrap {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 22px 16px 40px;
+    .wrap{ max-width:980px; margin:0 auto; padding:22px 16px 40px; }
+    .header{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
+    .panel{ border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:16px; }
+    button{
+      border:1px solid var(--line);
+      background:var(--btn);
+      color:var(--text);
+      padding:10px 14px;
+      border-radius:12px;
+      font-weight:600;
+      cursor:pointer;
     }
-
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-
-    .panel {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      background: var(--panel);
-      padding: 16px;
-    }
-
-    button {
-      border: 1px solid var(--line);
-      background: var(--btn);
-      color: var(--text);
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    button:hover { background: var(--btnHover); }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .status {
-      margin-top: 12px;
-      font-size: 13px;
-      line-height: 1.4;
-      color: var(--muted);
-    }
-
-    .ok { color: var(--ok); font-weight: 700; }
-    .warn { color: var(--warn); font-weight: 700; }
-    .err { color: var(--err); font-weight: 700; }
-
-    .hidden { display: none; }
+    button:hover{ background:var(--btnHover); }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    .status{ margin-top:12px; font-size:13px; line-height:1.4; color:var(--muted); word-break:break-word; }
+    .ok{ color:var(--ok); font-weight:700; }
+    .warn{ color:var(--warn); font-weight:700; }
+    .err{ color:var(--err); font-weight:700; }
+    .hidden{ display:none; }
+    #appRoot{ margin-top:14px; }
+    code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
   </style>
 
-  <!-- ✅ Supabase UMD browser build (THIS IS THE KEY FIX) -->
+  <!-- ✅ Supabase UMD -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-  <!-- ✅ Your non-module Supabase config -->
+  <!-- ✅ Your supabase client (non-module) -->
   <script src="supabase.js"></script>
 </head>
 
@@ -89,7 +64,7 @@
   <div class="wrap">
     <div class="header">
       <h2>Ivory Command Center</h2>
-      <div id="env"></div>
+      <div id="env" class="status" style="margin:0;"></div>
     </div>
 
     <div class="panel" id="loginPanel">
@@ -99,29 +74,29 @@
     </div>
 
     <div class="panel hidden" id="appPanel">
-      <p id="userLine"></p>
+      <div class="status" id="userLine" style="margin-top:0;"></div>
       <button id="btnLogout">Logout</button>
+
       <div id="appRoot"></div>
+      <div class="status" id="appStatus">Waiting to load tracker…</div>
     </div>
   </div>
 
   <script>
     (function () {
-      // =============================
-      // HARD FIXED PROJECT SETTINGS
-      // =============================
       const REPO = "ivory-command-center";
-      const canonicalBase = location.origin + "/" + REPO;
+      const canonicalBase = location.origin + "/" + REPO;      // no trailing slash (matches Supabase allowed URL)
+      const prettyBase    = canonicalBase + "/";               // convenient for loading files
 
-      document.getElementById("env").textContent = canonicalBase;
+      document.getElementById("env").textContent = prettyBase;
 
-      const status = (html) =>
-        document.getElementById("status").innerHTML = html;
+      const setStatus = (html) => document.getElementById("status").innerHTML = html;
+      const setAppStatus = (html) => document.getElementById("appStatus").innerHTML = html;
 
       const showApp = (email) => {
         document.getElementById("loginPanel").classList.add("hidden");
         document.getElementById("appPanel").classList.remove("hidden");
-        document.getElementById("userLine").textContent = "Signed in as " + email;
+        document.getElementById("userLine").innerHTML = "Signed in as <strong>" + (email || "") + "</strong>";
       };
 
       const showLogin = () => {
@@ -129,58 +104,94 @@
         document.getElementById("loginPanel").classList.remove("hidden");
       };
 
-      // =============================
-      // VERIFY SUPABASE
-      // =============================
       if (!window.supabaseClient) {
-        status("<span class='err'>Supabase client not initialized.</span>");
+        setStatus("<span class='err'>Supabase client not initialized.</span> Check <code>supabase.js</code>.");
         document.getElementById("btnGoogle").disabled = true;
         return;
       }
 
       const supabase = window.supabaseClient;
 
-      // =============================
-      // AUTH BUTTONS
-      // =============================
+      // --- script loader (so iPad/Pages behaves) ---
+      let trackerLoaded = false;
+
+      function loadScript(src) {
+        return new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = src;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error("Failed to load " + src));
+          document.body.appendChild(s);
+        });
+      }
+
+      async function loadTracker() {
+        if (trackerLoaded) return;
+        trackerLoaded = true;
+
+        setAppStatus("<span class='warn'>Loading tracker scripts…</span>");
+
+        const dbUrl = prettyBase + "database.js";
+        const mtUrl = prettyBase + "music-tracker.js";
+
+        try {
+          await loadScript(dbUrl);
+          await loadScript(mtUrl);
+
+          setAppStatus("<span class='ok'>Scripts loaded.</span> Initializing…");
+
+          // If your tracker exposes an init function, call it.
+          // If it doesn’t, it may auto-run on load, which is also fine.
+          if (window.initMusicTracker) {
+            window.initMusicTracker({ rootId: "appRoot" });
+            setAppStatus("<span class='ok'>Tracker initialized.</span>");
+          } else {
+            setAppStatus("<span class='ok'>Tracker loaded.</span> (No init function found, assuming auto-run.)");
+          }
+        } catch (e) {
+          setAppStatus("<span class='err'>Tracker failed:</span> " + (e.message || String(e)));
+        }
+      }
+
+      // --- auth buttons ---
       document.getElementById("btnGoogle").onclick = async () => {
-        status("<span class='warn'>Redirecting to Google…</span>");
+        setStatus("<span class='warn'>Redirecting to Google…</span>");
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: { redirectTo: canonicalBase }
         });
-        if (error) status("<span class='err'>" + error.message + "</span>");
+        if (error) setStatus("<span class='err'>" + error.message + "</span>");
       };
 
       document.getElementById("btnLogout").onclick = async () => {
         await supabase.auth.signOut();
         showLogin();
-        status("<span class='ok'>Signed out.</span>");
+        setStatus("<span class='ok'>Signed out.</span>");
       };
 
-      // =============================
-      // BOOTSTRAP
-      // =============================
+      // --- bootstrap ---
       (async () => {
         const { data } = await supabase.auth.getSession();
         if (data.session) {
           showApp(data.session.user.email);
-          status("<span class='ok'>Authenticated.</span>");
+          setStatus("<span class='ok'>Authenticated.</span>");
+          await loadTracker();
         } else {
           showLogin();
-          status("<span class='warn'>Not signed in.</span>");
+          setStatus("<span class='warn'>Not signed in.</span>");
         }
       })();
 
-      supabase.auth.onAuthStateChange((event, session) => {
+      supabase.auth.onAuthStateChange(async (event, session) => {
         if (event === "SIGNED_IN") {
-          history.replaceState({}, "", canonicalBase);
+          history.replaceState({}, "", prettyBase); // clean URL
           showApp(session.user.email);
-          status("<span class='ok'>Signed in.</span>");
+          setStatus("<span class='ok'>Signed in.</span>");
+          await loadTracker();
         }
         if (event === "SIGNED_OUT") {
           showLogin();
-          status("<span class='ok'>Signed out.</span>");
+          setStatus("<span class='ok'>Signed out.</span>");
         }
       });
     })();
