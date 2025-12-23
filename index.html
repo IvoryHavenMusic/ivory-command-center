@@ -129,7 +129,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Your existing config/client (keep this file in repo root) -->
-  <!-- IMPORTANT: This page expects window.SUPABASE_URL and window.SUPABASE_ANON_KEY OR window.supabaseClient -->
   <script src="supabase.js"></script>
 </head>
 
@@ -146,8 +145,9 @@
     <!-- LOGIN PANEL -->
     <div class="panel" id="loginPanel">
       <div><strong>Sign in</strong></div>
+
       <div class="tiny">
-        If you were getting a 404 on <code>/auth/callback</code>, this build avoids that route entirely.
+        This build avoids <code>/auth/callback</code> entirely and uses the repo base URL for OAuth.
       </div>
 
       <div class="row">
@@ -157,7 +157,7 @@
       <div class="status" id="statusBox">Initializing…</div>
 
       <div class="tiny">
-        Tip: first test in a private/incognito tab so Safari isn’t holding onto old redirects.
+        Best test: Safari Private tab (so old redirects/cookies don’t haunt you 👻).
       </div>
     </div>
 
@@ -173,26 +173,24 @@
         </div>
       </div>
 
-      <!-- Your app mounts here -->
       <div id="appRoot"></div>
+      <div class="status" id="appStatus" style="margin-top:12px;">App not loaded yet.</div>
     </div>
   </div>
 
   <script>
     (function () {
-      // ---------- helpers ----------
-      function getRepoBaseUrl() {
-        // Works for:
-        // https://domain/ivory-command-center/
-        // https://domain/ivory-command-center/index.html
-        const origin = window.location.origin;
-        const parts = window.location.pathname.split('/').filter(Boolean);
+      // =========================
+      // HARD-LOCK THE REPO NAME
+      // =========================
+      // This is a GitHub Pages PROJECT site, not the user root.
+      const REPO = "ivory-command-center";
 
-        // repo pages base = /<repo>/
-        // If your path is /ivory-command-center/... then parts[0] is repo
-        const repo = parts.length ? parts[0] : "";
-        return origin + "/" + repo + "/";
-      }
+      // Canonical redirect URL (NO trailing slash) because your Supabase config only accepts that.
+      const canonicalBase = window.location.origin + "/" + REPO;
+
+      // Pretty base (with trailing slash) used for human-friendly URL + routing.
+      const prettyBase = canonicalBase + "/";
 
       function setStatus(html) {
         document.getElementById("statusBox").innerHTML = html;
@@ -213,14 +211,15 @@
         document.getElementById("loginPanel").classList.remove("hidden");
       }
 
-      // ---------- init ----------
-      const baseUrl = getRepoBaseUrl();
-      setPill(baseUrl.replace("https://", "").replace("http://", ""));
+      function setAppStatus(html) {
+        document.getElementById("appStatus").innerHTML = html;
+      }
 
-      // Build a Supabase client from either:
-      // 1) window.supabaseClient (your supabase.js already created it), OR
-      // 2) window.SUPABASE_URL + window.SUPABASE_ANON_KEY (your supabase.js sets these), OR
-      // 3) fall back to error with clear instruction
+      setPill(prettyBase.replace("https://", "").replace("http://", ""));
+
+      // =========================
+      // Build / acquire Supabase client
+      // =========================
       let supabaseClient = window.supabaseClient;
 
       if (!supabaseClient && window.SUPABASE_URL && window.SUPABASE_ANON_KEY && window.supabase) {
@@ -234,42 +233,46 @@
           "Your <code>supabase.js</code> must define either:<br>" +
           "• <code>window.supabaseClient</code> (preferred), or<br>" +
           "• <code>window.SUPABASE_URL</code> and <code>window.SUPABASE_ANON_KEY</code>.<br><br>" +
-          "Once that’s set, refresh this page."
+          "Fix that, commit, and refresh."
         );
         document.getElementById("btnGoogle").disabled = true;
         return;
       }
 
-      // If we returned from OAuth, Supabase will parse the URL hash.
-      // After session is established, we clean the URL back to the base (prevents weirdness/bookmarking token URLs).
-      async function cleanUrlIfNeeded() {
+      // =========================
+      // OAuth return handling
+      // =========================
+      async function cleanUrlAfterOAuth() {
         const hasTokenInHash = window.location.hash && window.location.hash.includes("access_token=");
         if (!hasTokenInHash) return;
 
-        // Wait a moment so supabase-js can read it
-        await new Promise(r => setTimeout(r, 50));
+        // Give supabase-js a beat to read the hash
+        await new Promise(r => setTimeout(r, 75));
+
         try {
-          // If session exists, strip hash
           const { data } = await supabaseClient.auth.getSession();
           if (data && data.session) {
-            history.replaceState({}, document.title, baseUrl);
+            // Clean the token URL back to the pretty base (with slash)
+            history.replaceState({}, document.title, prettyBase);
           }
-        } catch (_) {
-          // no-op
-        }
+        } catch (_) {}
       }
 
-      // Wire buttons
+      // =========================
+      // Buttons
+      // =========================
       document.getElementById("btnGoogle").addEventListener("click", async () => {
         try {
           setStatus("<span class='warn'>Redirecting to Google…</span>");
+
           const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: "google",
             options: {
-              // CRITICAL: repo base URL, NOT /auth/callback
-              redirectTo: baseUrl
+              // IMPORTANT: Must exactly match what Supabase will accept (NO trailing slash)
+              redirectTo: canonicalBase
             }
           });
+
           if (error) throw error;
         } catch (e) {
           setStatus("<span class='err'>Login failed:</span> " + (e && e.message ? e.message : String(e)));
@@ -286,35 +289,84 @@
         }
       });
 
-      // Start up: check session
+      // =========================
+      // Load app scripts reliably (absolute URLs)
+      // =========================
+      let appLoaded = false;
+
+      function loadAppScripts() {
+        if (appLoaded) return;
+        appLoaded = true;
+
+        setAppStatus("<span class='warn'>Loading tracker scripts…</span>");
+
+        const scripts = [
+          "database.js",
+          "music-tracker.js"
+        ];
+
+        let i = 0;
+
+        function next() {
+          if (i >= scripts.length) {
+            setAppStatus("<span class='ok'>Scripts loaded.</span> If the UI is blank, your tracker may need an init hook.");
+            if (window.initMusicTracker) {
+              try {
+                window.initMusicTracker({ rootId: "appRoot" });
+                setAppStatus("<span class='ok'>Tracker initialized.</span>");
+              } catch (e) {
+                setAppStatus("<span class='err'>Tracker init error:</span> " + (e && e.message ? e.message : String(e)));
+              }
+            } else {
+              setAppStatus("<span class='warn'>No init function found.</span> (That’s okay if your tracker auto-runs.)");
+            }
+            return;
+          }
+
+          const src = prettyBase + scripts[i++]; // absolute under repo path
+          const s = document.createElement("script");
+          s.src = src;
+          s.onload = next;
+          s.onerror = () => {
+            const current = document.getElementById("appStatus").innerHTML;
+            setAppStatus(current + "<br><span class='warn'>Could not load:</span> <code>" + src + "</code>");
+            next();
+          };
+          document.body.appendChild(s);
+        }
+
+        next();
+      }
+
+      // =========================
+      // Bootstrap
+      // =========================
       (async function bootstrap() {
         setStatus("Checking session…");
-        await cleanUrlIfNeeded();
+        await cleanUrlAfterOAuth();
 
         try {
           const { data, error } = await supabaseClient.auth.getSession();
           if (error) throw error;
 
           const session = data && data.session ? data.session : null;
+
           if (session && session.user) {
             setStatus("<span class='ok'>Authenticated.</span> Loading app…");
             showApp(session.user.email);
-
-            // Load your existing app scripts AFTER auth is confirmed
-            // (These are optional. Keep/remove based on what your tracker needs.)
             loadAppScripts();
           } else {
+            showLogin();
             setStatus(
               "<span class='warn'>Not signed in yet.</span><br>" +
-              "When you click Google, it will redirect back to:<br><code>" + baseUrl + "</code>"
+              "Google will redirect back to:<br><code>" + canonicalBase + "</code><br>" +
+              "(Then we clean it to: <code>" + prettyBase + "</code>)"
             );
-            showLogin();
           }
 
-          // Listen for changes
           supabaseClient.auth.onAuthStateChange(async (event, newSession) => {
             if (event === "SIGNED_IN" && newSession && newSession.user) {
-              await cleanUrlIfNeeded();
+              await cleanUrlAfterOAuth();
               setStatus("<span class='ok'>Signed in.</span> Loading app…");
               showApp(newSession.user.email);
               loadAppScripts();
@@ -329,48 +381,6 @@
           setStatus("<span class='err'>Init error:</span> " + (e && e.message ? e.message : String(e)));
         }
       })();
-
-      // Prevent double-loading scripts
-      let appLoaded = false;
-
-      function loadAppScripts() {
-        if (appLoaded) return;
-        appLoaded = true;
-
-        // If your tracker expects certain IDs, keep #appRoot and mount there.
-
-        // Load existing JS files if they exist in your repo.
-        // If any of these filenames are wrong for your project, remove or rename them here.
-        const scripts = [
-          "database.js",
-          "music-tracker.js"
-        ];
-
-        let i = 0;
-        function next() {
-          if (i >= scripts.length) {
-            // optional: call an init if your tracker exposes one
-            if (window.initMusicTracker) {
-              try { window.initMusicTracker({ rootId: "appRoot" }); } catch (_) {}
-            }
-            return;
-          }
-
-          const src = scripts[i++];
-          const s = document.createElement("script");
-          s.src = src;
-          s.onload = next;
-          s.onerror = () => {
-            // If a file isn't found, we still continue (so the app page doesn't die)
-            const current = document.getElementById("statusBox").innerHTML;
-            setStatus(current + "<br><span class='warn'>Note:</span> Could not load <code>" + src + "</code> (not found).");
-            next();
-          };
-          document.body.appendChild(s);
-        }
-
-        next();
-      }
 
     })();
   </script>
