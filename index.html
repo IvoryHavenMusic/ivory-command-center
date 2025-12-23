@@ -18,7 +18,6 @@
       --ok:#40d67f;
       --warn:#ffb020;
       --err:#ff5d5d;
-      --chip:rgba(255,255,255,0.09);
     }
     body{
       margin:0;
@@ -29,112 +28,35 @@
         var(--bg);
       color:var(--text);
     }
-    .wrap{max-width:1100px;margin:0 auto;padding:22px 16px 40px;}
-    .top{
-      display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;
-    }
-    .brand h1{margin:0;font-size:20px;letter-spacing:.2px;}
+    .wrap{max-width:980px;margin:0 auto;padding:22px 16px 40px;}
+    .header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;}
+    .brand h1{margin:0;font-size:18px;letter-spacing:0.2px;}
     .brand p{margin:6px 0 0;font-size:12px;color:var(--muted);}
-    .pill{
-      border:1px solid var(--line);
-      padding:8px 10px;border-radius:999px;
-      font-size:12px;color:var(--muted);
-      background:rgba(255,255,255,0.03);
-      white-space:nowrap;
-    }
-    .panel{
-      border:1px solid var(--line);
-      border-radius:14px;
-      background:var(--panel);
-      padding:16px;
-      box-shadow:0 10px 40px rgba(0,0,0,0.25);
-    }
+    .pill{border:1px solid var(--line);padding:8px 10px;border-radius:999px;font-size:12px;color:var(--muted);background:rgba(255,255,255,0.03);white-space:nowrap;}
+    .panel{border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:16px;box-shadow:0 10px 40px rgba(0,0,0,0.25);}
     .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px;}
-    button{
-      appearance:none;
-      border:1px solid var(--line);
-      background:var(--btn);
-      color:var(--text);
-      padding:10px 12px;border-radius:12px;
-      font-weight:600;cursor:pointer;
-    }
+    button{appearance:none;border:1px solid var(--line);background:var(--btn);color:var(--text);padding:10px 12px;border-radius:12px;font-weight:600;cursor:pointer;}
     button:hover{background:var(--btnHover);}
-    button:disabled{opacity:.55;cursor:not-allowed;}
-    .status{
-      margin-top:10px;padding:10px 12px;border-radius:12px;
-      border:1px solid var(--line);
-      background:rgba(0,0,0,0.15);
-      font-size:12px;color:var(--muted);
-      line-height:1.35;word-break:break-word;
-      white-space:pre-wrap;
-    }
-    .ok{color:var(--ok);font-weight:700;}
-    .warn{color:var(--warn);font-weight:700;}
-    .err{color:var(--err);font-weight:700;}
-    .hidden{display:none!important;}
+    button:disabled{opacity:0.55;cursor:not-allowed;}
+    .status{margin-top:10px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,0.15);font-size:12px;color:var(--muted);line-height:1.35;word-break:break-word;}
+    .status .ok{color:var(--ok);font-weight:700;}
+    .status .warn{color:var(--warn);font-weight:700;}
+    .status .err{color:var(--err);font-weight:700;}
+    .hidden{display:none !important;}
     .tiny{margin-top:10px;font-size:12px;color:var(--muted);}
     code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;font-size:12px;}
-    .grid{
-      display:grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap:10px;
-      margin-top:12px;
-    }
-    .field{
-      display:flex;flex-direction:column;gap:6px;
-      background:rgba(255,255,255,0.03);
-      border:1px solid var(--line);
-      padding:10px;border-radius:12px;
-    }
-    .field label{font-size:11px;color:var(--muted);}
-    .field input,.field select,.field textarea{
-      width:100%;
-      border:1px solid var(--line);
-      background:rgba(0,0,0,0.18);
-      color:var(--text);
-      border-radius:10px;
-      padding:9px 10px;
-      outline:none;
-      font-size:13px;
-    }
-    .field textarea{min-height:42px;resize:vertical;}
-    .span2{grid-column: span 2;}
-    .span3{grid-column: span 3;}
-    .span6{grid-column: span 6;}
-    .tableWrap{
-      margin-top:14px;
-      border:1px solid var(--line);
-      border-radius:12px;
-      overflow:auto;
-      background:rgba(0,0,0,0.10);
-    }
-    table{width:100%;border-collapse:collapse;font-size:13px;min-width:860px;}
-    th,td{padding:10px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
-    th{position:sticky;top:0;background:rgba(10,14,20,0.92);text-align:left;color:var(--muted);font-size:12px;}
-    tr:hover td{background:rgba(255,255,255,0.03);}
-    .chips{display:flex;flex-wrap:wrap;gap:6px;}
-    .chip{
-      padding:6px 8px;border-radius:999px;
-      background:var(--chip);
-      border:1px solid var(--line);
-      font-size:12px;color:var(--muted);
-      white-space:nowrap;
-    }
-    .actions{display:flex;gap:8px;flex-wrap:wrap;}
-    .btnMini{padding:7px 10px;border-radius:10px;font-size:12px;}
-    .muted{color:var(--muted);}
   </style>
 
-  <!-- Supabase (UMD) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- Supabase JS (v2) UMD -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Your supabase.js should set window.supabaseClient -->
+  <!-- Your NON-module supabase.js that sets window.supabaseClient -->
   <script src="supabase.js"></script>
 </head>
 
 <body>
   <div class="wrap">
-    <div class="top">
+    <div class="header">
       <div class="brand">
         <h1>Ivory Command Center</h1>
         <p>Music release tracker for Ivory Haven + Ivory Ocean</p>
@@ -142,435 +64,211 @@
       <div class="pill" id="pillEnv">Loading…</div>
     </div>
 
-    <!-- LOGIN -->
+    <!-- LOGIN PANEL -->
     <div class="panel" id="loginPanel">
       <div><strong>Sign in</strong></div>
-      <div class="tiny">Uses Google OAuth via Supabase. Redirects back to your repo base URL.</div>
+
+      <div class="tiny">
+        OAuth returns to the repo base URL (no <code>/auth/callback</code> route needed).
+      </div>
+
       <div class="row">
         <button id="btnGoogle">Continue with Google</button>
       </div>
+
       <div class="status" id="statusBox">Initializing…</div>
     </div>
 
-    <!-- APP -->
+    <!-- APP PANEL -->
     <div class="panel hidden" id="appPanel">
-      <div class="row" style="justify-content:space-between;margin-top:0;">
+      <div class="header" style="margin-bottom: 10px;">
         <div>
           <div><strong>Welcome back</strong></div>
           <div class="tiny" id="userLine"></div>
         </div>
-        <div class="row" style="margin-top:0;">
-          <button id="btnRefresh">Refresh</button>
+        <div class="row" style="margin:0;">
           <button id="btnLogout">Logout</button>
         </div>
       </div>
 
-      <div class="status" id="appStatus">Loading…</div>
-
-      <!-- Filters -->
-      <div class="row">
-        <span class="chip">Filter:</span>
-        <select id="filterLabel" class="chip" style="padding:8px 10px;border-radius:999px;">
-          <option value="">All labels</option>
-          <option value="Ivory Haven">Ivory Haven</option>
-          <option value="Ivory Ocean">Ivory Ocean</option>
-        </select>
-
-        <select id="filterStatus" class="chip" style="padding:8px 10px;border-radius:999px;">
-          <option value="">All statuses</option>
-          <option value="backlog">backlog</option>
-          <option value="scheduled">scheduled</option>
-          <option value="live">live</option>
-          <option value="archived">archived</option>
-        </select>
-
-        <button class="btnMini" id="btnClearFilters">Clear</button>
-      </div>
-
-      <!-- Add new entry -->
-      <div class="grid">
-        <div class="field span2">
-          <label>Song title</label>
-          <input id="inTitle" placeholder="Tropical High" />
-        </div>
-
-        <div class="field">
-          <label>Label</label>
-          <select id="inLabel">
-            <option value="Ivory Haven">Ivory Haven</option>
-            <option value="Ivory Ocean">Ivory Ocean</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Status</label>
-          <select id="inStatus">
-            <option value="backlog">backlog</option>
-            <option value="scheduled">scheduled</option>
-            <option value="live">live</option>
-            <option value="archived">archived</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Version</label>
-          <input id="inVersion" placeholder="v6" />
-        </div>
-
-        <div class="field">
-          <label>Demo #</label>
-          <input id="inDemo" placeholder="Demo 3" />
-        </div>
-
-        <div class="field">
-          <label>Engine version</label>
-          <input id="inEngine" placeholder="v6" />
-        </div>
-
-        <div class="field span2">
-          <label>Scheduled date (optional)</label>
-          <input id="inScheduledDate" placeholder="YYYY-MM-DD" />
-        </div>
-
-        <div class="field span2">
-          <label>Live link (optional)</label>
-          <input id="inLiveLink" placeholder="https://…" />
-        </div>
-
-        <div class="field span6">
-          <label>Notes</label>
-          <textarea id="inNotes" placeholder="Chosen for single…"></textarea>
-        </div>
-
-        <div class="row" style="margin-top:0;">
-          <button id="btnAdd">Add track</button>
-        </div>
-      </div>
-
-      <!-- Table -->
-      <div class="tableWrap">
-        <table id="tracksTable">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Label</th>
-              <th>Status</th>
-              <th>Version</th>
-              <th>Demo</th>
-              <th>Engine</th>
-              <th>Scheduled</th>
-              <th>Live link</th>
-              <th>Notes</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="tracksBody">
-            <tr><td colspan="10" class="muted">No data yet.</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="status" id="debugBox"></div>
+      <!-- UI mounts here -->
+      <div id="appRoot"></div>
+      <div class="status" id="appStatus" style="margin-top:12px;">App not loaded yet.</div>
     </div>
   </div>
 
   <script>
     (function () {
+      // ====== CONFIG ======
       const REPO = "ivory-command-center";
-      const canonicalBase = window.location.origin + "/" + REPO; // no trailing slash
-      const prettyBase = canonicalBase + "/";
 
-      const pillEnv = document.getElementById("pillEnv");
-      pillEnv.textContent = prettyBase.replace("https://","").replace("http://","");
+      // Supabase URL config in your dashboard only accepts NO trailing slash.
+      const canonicalBase = window.location.origin + "/" + REPO;      // no trailing slash
+      const prettyBase    = canonicalBase + "/";                      // with trailing slash (for loading files)
 
-      const statusBox = document.getElementById("statusBox");
-      const appStatus = document.getElementById("appStatus");
-      const debugBox = document.getElementById("debugBox");
+      // Table names (your actual structure)
+      const TABLES = {
+        songs: "songs",
+        tracker: "music_tracker"
+      };
 
-      const loginPanel = document.getElementById("loginPanel");
-      const appPanel = document.getElementById("appPanel");
+      // ====== UI helpers ======
+      function setStatus(html){ document.getElementById("statusBox").innerHTML = html; }
+      function setAppStatus(html){ document.getElementById("appStatus").innerHTML = html; }
+      function setPill(text){ document.getElementById("pillEnv").textContent = text; }
 
-      const btnGoogle = document.getElementById("btnGoogle");
-      const btnLogout = document.getElementById("btnLogout");
-      const btnRefresh = document.getElementById("btnRefresh");
-
-      const tracksBody = document.getElementById("tracksBody");
-
-      const filterLabel = document.getElementById("filterLabel");
-      const filterStatus = document.getElementById("filterStatus");
-
-      const btnClearFilters = document.getElementById("btnClearFilters");
-
-      const inTitle = document.getElementById("inTitle");
-      const inLabel = document.getElementById("inLabel");
-      const inStatus = document.getElementById("inStatus");
-      const inVersion = document.getElementById("inVersion");
-      const inDemo = document.getElementById("inDemo");
-      const inEngine = document.getElementById("inEngine");
-      const inNotes = document.getElementById("inNotes");
-      const inScheduledDate = document.getElementById("inScheduledDate");
-      const inLiveLink = document.getElementById("inLiveLink");
-
-      const btnAdd = document.getElementById("btnAdd");
-
-      function showLogin() {
-        appPanel.classList.add("hidden");
-        loginPanel.classList.remove("hidden");
-      }
-
-      function showApp(email) {
-        loginPanel.classList.add("hidden");
-        appPanel.classList.remove("hidden");
+      function showApp(email){
+        document.getElementById("loginPanel").classList.add("hidden");
+        document.getElementById("appPanel").classList.remove("hidden");
         document.getElementById("userLine").textContent = email ? ("Signed in as " + email) : "Signed in";
       }
+      function showLogin(){
+        document.getElementById("appPanel").classList.add("hidden");
+        document.getElementById("loginPanel").classList.remove("hidden");
+      }
 
-      function setLoginStatus(html) { statusBox.innerHTML = html; }
-      function setAppStatus(html) { appStatus.innerHTML = html; }
-      function setDebug(text) { debugBox.textContent = text || ""; }
+      setPill(prettyBase.replace("https://","").replace("http://",""));
 
-      // On-page error capture (iPad friendly)
-      window.addEventListener("error", (e) => {
-        setDebug("JS ERROR:\n" + (e && e.message ? e.message : String(e)));
-      });
-      window.addEventListener("unhandledrejection", (e) => {
-        setDebug("PROMISE ERROR:\n" + (e && e.reason && e.reason.message ? e.reason.message : String(e.reason || e)));
-      });
+      // ====== Supabase client ======
+      const supabaseClient = window.supabaseClient;
 
-      if (!window.supabaseClient) {
-        setLoginStatus("<span class='err'>Missing Supabase client.</span> Your <code>supabase.js</code> must create <code>window.supabaseClient</code>.");
-        btnGoogle.disabled = true;
+      if (!supabaseClient) {
+        setStatus(
+          "<span class='err'>Missing Supabase client.</span><br>" +
+          "Your <code>supabase.js</code> must set <code>window.supabaseClient</code>.<br>" +
+          "Open <code>/supabase.js</code> directly and confirm it shows the non-module version."
+        );
+        document.getElementById("btnGoogle").disabled = true;
         return;
       }
 
-      const supabaseClient = window.supabaseClient;
+      // ====== OAuth return cleanup ======
+      async function cleanUrlAfterOAuth(){
+        const hasTokenInHash = window.location.hash && window.location.hash.includes("access_token=");
+        if (!hasTokenInHash) return;
 
-      async function fetchTracks() {
-        setAppStatus("<span class='warn'>Loading tracks…</span>");
-        setDebug("");
+        await new Promise(r => setTimeout(r, 75));
 
-        let q = supabaseClient.from("music_tracker").select("*").order("created_at", { ascending: true });
-
-        const lbl = filterLabel.value.trim();
-        const st = filterStatus.value.trim();
-        if (lbl) q = q.eq("label", lbl);
-        if (st) q = q.eq("status", st);
-
-        const { data, error } = await q;
-
-        if (error) {
-          setAppStatus("<span class='err'>Failed to load.</span>");
-          setDebug(JSON.stringify(error, null, 2));
-          return [];
-        }
-
-        setAppStatus("<span class='ok'>Loaded:</span> " + data.length + " track(s).");
-        renderTracks(data);
-        return data;
+        try{
+          const { data } = await supabaseClient.auth.getSession();
+          if (data && data.session) {
+            history.replaceState({}, document.title, prettyBase);
+          }
+        }catch(_){}
       }
 
-      function esc(s) {
-        return String(s ?? "").replace(/[&<>"']/g, m => ({
-          "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-        }[m]));
-      }
-
-      function renderTracks(rows) {
-        if (!rows || !rows.length) {
-          tracksBody.innerHTML = "<tr><td colspan='10' class='muted'>No tracks found for these filters.</td></tr>";
-          return;
-        }
-
-        tracksBody.innerHTML = rows.map(r => {
-          const id = r.id;
-          return `
-            <tr>
-              <td><strong>${esc(r.song_title)}</strong></td>
-              <td>${esc(r.label)}</td>
-              <td>${esc(r.status)}</td>
-              <td>${esc(r.version)}</td>
-              <td>${esc(r.demo_number)}</td>
-              <td>${esc(r.engine_version)}</td>
-              <td>${esc(r.scheduled_release_date)}</td>
-              <td>${r.live_link ? `<a href="${esc(r.live_link)}" target="_blank" rel="noopener noreferrer">link</a>` : ""}</td>
-              <td>${esc(r.notes || r.status_note || "")}</td>
-              <td>
-                <div class="actions">
-                  <button class="btnMini" data-act="backlog" data-id="${id}">Backlog</button>
-                  <button class="btnMini" data-act="scheduled" data-id="${id}">Scheduled</button>
-                  <button class="btnMini" data-act="live" data-id="${id}">Live</button>
-                  <button class="btnMini" data-act="archive" data-id="${id}">Archive</button>
-                </div>
-              </td>
-            </tr>
-          `;
-        }).join("");
-      }
-
-      async function addTrack() {
-        const payload = {
-          song_title: inTitle.value.trim(),
-          label: inLabel.value,
-          status: inStatus.value,
-          version: inVersion.value.trim() || null,
-          demo_number: inDemo.value.trim() || null,
-          engine_version: inEngine.value.trim() || null,
-          notes: inNotes.value.trim() || null,
-          scheduled_release_date: inScheduledDate.value.trim() || null,
-          live_link: inLiveLink.value.trim() || null
-        };
-
-        if (!payload.song_title) {
-          setAppStatus("<span class='warn'>Song title is required.</span>");
-          return;
-        }
-
-        setAppStatus("<span class='warn'>Adding…</span>");
-        setDebug("");
-
-        const { data, error } = await supabaseClient
-          .from("music_tracker")
-          .insert([payload])
-          .select()
-          .single();
-
-        if (error) {
-          setAppStatus("<span class='err'>Add failed.</span>");
-          setDebug(JSON.stringify(error, null, 2));
-          return;
-        }
-
-        // Clear inputs lightly
-        inTitle.value = "";
-        inVersion.value = "";
-        inDemo.value = "";
-        inEngine.value = "";
-        inNotes.value = "";
-        inScheduledDate.value = "";
-        inLiveLink.value = "";
-
-        setAppStatus("<span class='ok'>Added:</span> " + esc(data.song_title));
-        await fetchTracks();
-      }
-
-      async function setTrackStatus(id, status) {
-        setAppStatus("<span class='warn'>Updating…</span>");
-        setDebug("");
-
-        const patch = { status };
-
-        if (status === "scheduled") {
-          const d = prompt("Scheduled release date (YYYY-MM-DD):", "");
-          if (!d) { setAppStatus("<span class='warn'>Cancelled.</span>"); return; }
-          patch.scheduled_release_date = d;
-        }
-
-        if (status === "live") {
-          const link = prompt("Live link (URL):", "");
-          if (!link) { setAppStatus("<span class='warn'>Cancelled.</span>"); return; }
-          patch.live_link = link;
-          patch.status_note = "Released and live";
-        }
-
-        if (status === "archived") {
-          const reason = prompt("Archive reason (optional):", "Superseded by newer version");
-          patch.archived_reason = reason || null;
-        }
-
-        const { error } = await supabaseClient
-          .from("music_tracker")
-          .update(patch)
-          .eq("id", id);
-
-        if (error) {
-          setAppStatus("<span class='err'>Update failed.</span>");
-          setDebug(JSON.stringify(error, null, 2));
-          return;
-        }
-
-        setAppStatus("<span class='ok'>Updated.</span>");
-        await fetchTracks();
-      }
-
-      tracksBody.addEventListener("click", async (e) => {
-        const btn = e.target.closest("button[data-act]");
-        if (!btn) return;
-        const id = btn.getAttribute("data-id");
-        const act = btn.getAttribute("data-act");
-
-        if (act === "backlog") return setTrackStatus(id, "backlog");
-        if (act === "scheduled") return setTrackStatus(id, "scheduled");
-        if (act === "live") return setTrackStatus(id, "live");
-        if (act === "archive") return setTrackStatus(id, "archived");
-      });
-
-      btnAdd.addEventListener("click", addTrack);
-
-      btnRefresh.addEventListener("click", fetchTracks);
-
-      filterLabel.addEventListener("change", fetchTracks);
-      filterStatus.addEventListener("change", fetchTracks);
-      btnClearFilters.addEventListener("click", () => {
-        filterLabel.value = "";
-        filterStatus.value = "";
-        fetchTracks();
-      });
-
-      btnGoogle.addEventListener("click", async () => {
-        try {
-          setLoginStatus("<span class='warn'>Redirecting to Google…</span>");
+      // ====== Button wiring ======
+      document.getElementById("btnGoogle").addEventListener("click", async () => {
+        try{
+          setStatus("<span class='warn'>Redirecting to Google…</span>");
           const { error } = await supabaseClient.auth.signInWithOAuth({
             provider: "google",
-            options: { redirectTo: canonicalBase }
+            options: {
+              redirectTo: canonicalBase
+            }
           });
           if (error) throw error;
-        } catch (e) {
-          setLoginStatus("<span class='err'>Login failed:</span> " + (e && e.message ? e.message : String(e)));
+        }catch(e){
+          setStatus("<span class='err'>Login failed:</span> " + (e && e.message ? e.message : String(e)));
         }
       });
 
-      btnLogout.addEventListener("click", async () => {
-        await supabaseClient.auth.signOut();
-        showLogin();
-        setLoginStatus("<span class='ok'>Signed out.</span>");
+      document.getElementById("btnLogout").addEventListener("click", async () => {
+        try{
+          await supabaseClient.auth.signOut();
+          showLogin();
+          setStatus("<span class='ok'>Signed out.</span>");
+          setAppStatus("App not loaded yet.");
+          document.getElementById("appRoot").innerHTML = "";
+        }catch(e){
+          setStatus("<span class='err'>Logout failed:</span> " + (e && e.message ? e.message : String(e)));
+        }
       });
 
-      async function bootstrap() {
-        setLoginStatus("Checking session…");
-        try {
+      // ====== Load tracker UI (non-module) ======
+      let uiLoaded = false;
+
+      function loadTrackerUI(){
+        if (uiLoaded) return;
+        uiLoaded = true;
+
+        setAppStatus("<span class='warn'>Loading tracker UI…</span>");
+
+        const uiSrc = prettyBase + "tracker-ui.js";
+        const s = document.createElement("script");
+        s.src = uiSrc;
+        s.onload = () => {
+          // tracker-ui.js must define window.initTrackerUI
+          if (typeof window.initTrackerUI !== "function") {
+            setAppStatus(
+              "<span class='err'>tracker-ui.js loaded, but no <code>window.initTrackerUI</code> found.</span><br>" +
+              "Fix: in <code>tracker-ui.js</code>, add something like:<br>" +
+              "<code>window.initTrackerUI = function(opts){ ... }</code>"
+            );
+            return;
+          }
+
+          try{
+            window.initTrackerUI({
+              rootId: "appRoot",
+              supabase: supabaseClient,
+              tables: TABLES
+            });
+            setAppStatus("<span class='ok'>Tracker UI initialized.</span>");
+          }catch(e){
+            setAppStatus("<span class='err'>Tracker UI init error:</span> " + (e && e.message ? e.message : String(e)));
+          }
+        };
+        s.onerror = () => {
+          setAppStatus(
+            "<span class='err'>Could not load tracker UI.</span><br>" +
+            "Missing file: <code>" + uiSrc + "</code>"
+          );
+        };
+        document.body.appendChild(s);
+      }
+
+      // ====== Bootstrap ======
+      (async function bootstrap(){
+        setStatus("Checking session…");
+        await cleanUrlAfterOAuth();
+
+        try{
           const { data, error } = await supabaseClient.auth.getSession();
           if (error) throw error;
 
           const session = data && data.session ? data.session : null;
+
           if (session && session.user) {
-            // Clean any token URLs to the pretty base
-            if (window.location.hash && window.location.hash.includes("access_token=")) {
-              history.replaceState({}, document.title, prettyBase);
-            }
+            setStatus("<span class='ok'>Authenticated.</span> Loading tracker…");
             showApp(session.user.email);
-            await fetchTracks();
+            loadTrackerUI();
           } else {
             showLogin();
-            setLoginStatus("<span class='warn'>Not signed in.</span>");
+            setStatus(
+              "<span class='warn'>Not signed in yet.</span><br>" +
+              "Google will redirect back to:<br><code>" + canonicalBase + "</code>"
+            );
           }
 
           supabaseClient.auth.onAuthStateChange(async (event, newSession) => {
             if (event === "SIGNED_IN" && newSession && newSession.user) {
-              history.replaceState({}, document.title, prettyBase);
+              await cleanUrlAfterOAuth();
+              setStatus("<span class='ok'>Signed in.</span> Loading tracker…");
               showApp(newSession.user.email);
-              await fetchTracks();
+              loadTrackerUI();
             }
             if (event === "SIGNED_OUT") {
               showLogin();
-              setLoginStatus("<span class='ok'>Signed out.</span>");
+              setStatus("<span class='ok'>Signed out.</span>");
             }
           });
 
-        } catch (e) {
-          setLoginStatus("<span class='err'>Init error:</span> " + (e && e.message ? e.message : String(e)));
+        }catch(e){
+          setStatus("<span class='err'>Init error:</span> " + (e && e.message ? e.message : String(e)));
         }
-      }
+      })();
 
-      bootstrap();
     })();
   </script>
 </body>
