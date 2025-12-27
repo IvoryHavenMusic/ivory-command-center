@@ -4,6 +4,9 @@
 // - Backlog (songs table)
 // - Add new song (insert into songs)
 // - Pull song from backlog into tracker (insert into music_tracker)
+// NEW:
+// - Delete rows from music_tracker and songs
+// - Bulk delete tracker rows after a chosen date
 
 (function () {
   function el(tag, attrs = {}, children = []) {
@@ -36,7 +39,6 @@
     return sb;
   }
 
-  // --- minimal styles injected for UI bits ---
   function injectUiStyles() {
     if (document.getElementById("trackerUiStyles")) return;
     const css = `
@@ -46,6 +48,8 @@
       .cc-btn{appearance:none;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.92);padding:10px 12px;border-radius:12px;font-weight:700;cursor:pointer}
       .cc-btn:hover{background:rgba(255,255,255,0.18)}
       .cc-btn:disabled{opacity:.55;cursor:not-allowed}
+      .cc-danger{border-color:rgba(255,93,93,0.35);background:rgba(255,93,93,0.12)}
+      .cc-danger:hover{background:rgba(255,93,93,0.18)}
       .cc-tableWrap{overflow:auto;border:1px solid rgba(255,255,255,0.12);border-radius:14px;background:rgba(255,255,255,0.04)}
       table.cc-table{width:100%;border-collapse:separate;border-spacing:0}
       .cc-table th,.cc-table td{padding:10px 10px;border-bottom:1px solid rgba(255,255,255,0.10);font-size:12px;vertical-align:top}
@@ -64,6 +68,8 @@
       .cc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       @media (max-width:740px){.cc-grid{grid-template-columns:1fr}}
       .cc-note{font-size:12px;color:rgba(255,255,255,0.65);line-height:1.35;margin-top:6px}
+      .cc-mini{font-size:11px;color:rgba(255,255,255,0.72)}
+      .cc-actions{display:flex;gap:8px;flex-wrap:wrap}
     `;
     const style = document.createElement("style");
     style.id = "trackerUiStyles";
@@ -121,6 +127,22 @@
     return Array.from(new Set(arr.filter(Boolean)));
   }
 
+  // --- Delete helpers ---
+  async function deleteById(sb, table, id) {
+    const { error } = await sb.from(table).delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  async function deleteTrackerAfterDate(sb, dateStr) {
+    // dateStr: YYYY-MM-DD
+    const { error } = await sb
+      .from("music_tracker")
+      .delete()
+      .gt("release_date", dateStr);
+    if (error) throw error;
+  }
+
+  // buildTable now supports "render" columns for custom cell nodes
   function buildTable(columns, rows) {
     const thead = el("thead", {}, [
       el("tr", {}, columns.map(c => el("th", {}, [c.label])))
@@ -133,7 +155,10 @@
       );
     } else {
       for (const r of rows) {
-        const tds = columns.map(c => el("td", {}, [safe(r[c.key])]));
+        const tds = columns.map(c => {
+          if (typeof c.render === "function") return el("td", {}, [c.render(r)]);
+          return el("td", {}, [safe(r[c.key])]);
+        });
         tbody.appendChild(el("tr", {}, tds));
       }
     }
@@ -143,12 +168,11 @@
     ]);
   }
 
-  // --- MAIN INIT ---
   window.initTrackerUI = async function initTrackerUI({ rootId = "appRoot" } = {}) {
     injectUiStyles();
 
     const root = document.getElementById(rootId);
-    if (!root) throw new Error("Missing #"+rootId);
+    if (!root) throw new Error("Missing #" + rootId);
 
     const sb = await requireSupabase();
 
@@ -168,7 +192,7 @@
     root.appendChild(content);
     root.appendChild(statusLine);
 
-    let mode = "tracker"; // "tracker" | "backlog"
+    let mode = "tracker";
     let songsCache = [];
     let trackerCache = [];
 
@@ -188,7 +212,6 @@
     async function refreshData() {
       setUiStatus("warn", "Refreshing data…");
       try {
-        // load both so switching tabs is instant
         [songsCache, trackerCache] = await Promise.all([loadSongs(sb), loadTracker(sb)]);
         setUiStatus("ok", `Loaded ${trackerCache.length} tracker rows and ${songsCache.length} songs.`);
       } catch (e) {
@@ -197,10 +220,13 @@
       }
     }
 
+    function confirmDanger(text) {
+      return window.confirm(text);
+    }
+
     function render() {
       toolbar.innerHTML = "";
       content.innerHTML = "";
-
       setActiveTab();
 
       const btnRefresh = el("button", { class: "cc-btn", type: "button" }, ["Refresh"]);
@@ -209,7 +235,6 @@
         render();
       });
 
-      // shared filter widgets
       const artistOptions =
         mode === "tracker"
           ? uniq(trackerCache.map(r => r.artist))
@@ -230,14 +255,39 @@
       if (mode === "tracker") {
         const btnPull = el("button", { class: "cc-btn", type: "button" }, ["Add from Backlog → Tracker"]);
         const btnNewSong = el("button", { class: "cc-btn", type: "button" }, ["Add New Song (Backlog)"]);
-
         btnNewSong.addEventListener("click", () => openAddSongModal());
         btnPull.addEventListener("click", () => openPullToTrackerModal());
-
         toolbar.appendChild(btnPull);
         toolbar.appendChild(btnNewSong);
 
-        // tracker columns (based on your schema screenshots)
+        // Bulk delete after date (super useful for your Jan 23 cleanup)
+        const bulkDate = el("input", { class: "cc-input", type: "date" });
+        const btnBulkDelete = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete tracker rows after date"]);
+        btnBulkDelete.addEventListener("click", async () => {
+          const d = bulkDate.value;
+          if (!d) {
+            setUiStatus("err", "Pick a date first for bulk delete.");
+            return;
+          }
+          const ok = confirmDanger(`Delete ALL music_tracker rows with release_date after ${d}?\n\nThis cannot be undone.`);
+          if (!ok) return;
+
+          try {
+            setUiStatus("warn", "Bulk deleting…");
+            await deleteTrackerAfterDate(sb, d);
+            await refreshData();
+            render();
+            setUiStatus("ok", `Deleted tracker rows after ${d}.`);
+          } catch (e) {
+            console.error(e);
+            setUiStatus("err", "Bulk delete failed: " + (e?.message || String(e)));
+          }
+        });
+
+        toolbar.appendChild(el("span", { class: "cc-chip" }, ["Bulk cleanup"]));
+        toolbar.appendChild(bulkDate);
+        toolbar.appendChild(btnBulkDelete);
+
         const cols = [
           { key: "release_date", label: "Release date" },
           { key: "artist", label: "Artist" },
@@ -251,18 +301,57 @@
           { key: "demo_preference", label: "Demo pref" },
           { key: "pitch_by", label: "Pitch by" },
           { key: "remaster_needed", label: "Remaster?" },
-          { key: "notes", label: "Notes" }
+          { key: "notes", label: "Notes" },
+          {
+            label: "Actions",
+            render: (r) => {
+              const wrap = el("div", { class: "cc-actions" }, []);
+              const btnDel = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete"]);
+              btnDel.addEventListener("click", async () => {
+                const id = r.id;
+                if (id == null) {
+                  setUiStatus("err", "Cannot delete: row has no id.");
+                  return;
+                }
+                const title = safe(r.song_title) || "(untitled)";
+                const date = fmtDate(r.release_date) || "(no date)";
+                const ok = confirmDanger(`Delete tracker row?\n\n${date} • ${safe(r.artist)} • ${title}\n\nThis cannot be undone.`);
+                if (!ok) return;
+
+                try {
+                  setUiStatus("warn", "Deleting…");
+                  await deleteById(sb, "music_tracker", id);
+                  await refreshData();
+                  render();
+                  setUiStatus("ok", "Deleted tracker row.");
+                } catch (e) {
+                  console.error(e);
+                  setUiStatus("err", "Delete failed: " + (e?.message || String(e)));
+                }
+              });
+              wrap.appendChild(btnDel);
+              return wrap;
+            }
+          }
         ];
 
         function applyFilters(rows) {
           const a = selArtist.value;
           const q = qSearch.value.trim().toLowerCase();
-          return rows.filter(r => {
-            if (a && safe(r.artist) !== a) return false;
-            if (!q) return true;
-            const hay = (safe(r.song_title) + " " + safe(r.notes) + " " + safe(r.genre) + " " + safe(r.streaming_status) + " " + safe(r.video_status)).toLowerCase();
-            return hay.includes(q);
-          }).map(r => ({ ...r, release_date: fmtDate(r.release_date) }));
+          return rows
+            .filter(r => {
+              if (a && safe(r.artist) !== a) return false;
+              if (!q) return true;
+              const hay = (
+                safe(r.song_title) + " " +
+                safe(r.notes) + " " +
+                safe(r.genre) + " " +
+                safe(r.streaming_status) + " " +
+                safe(r.video_status)
+              ).toLowerCase();
+              return hay.includes(q);
+            })
+            .map(r => ({ ...r, release_date: fmtDate(r.release_date) }));
         }
 
         function redraw() {
@@ -275,12 +364,10 @@
         redraw();
 
       } else {
-        // backlog view
         const btnNewSong = el("button", { class: "cc-btn", type: "button" }, ["Add New Song"]);
         btnNewSong.addEventListener("click", () => openAddSongModal());
         toolbar.appendChild(btnNewSong);
 
-        // backlog columns (based on your songs schema screenshot)
         const cols = [
           { key: "created_at", label: "Created" },
           { key: "artist", label: "Artist" },
@@ -289,18 +376,55 @@
           { key: "key_root", label: "Key root" },
           { key: "mode", label: "Mode" },
           { key: "genre", label: "Genre" },
-          { key: "notes_performance", label: "Notes" }
+          { key: "notes_performance", label: "Notes" },
+          {
+            label: "Actions",
+            render: (r) => {
+              const wrap = el("div", { class: "cc-actions" }, []);
+              const btnDel = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete"]);
+              btnDel.addEventListener("click", async () => {
+                const id = r.id;
+                if (id == null) {
+                  setUiStatus("err", "Cannot delete: row has no id.");
+                  return;
+                }
+                const title = safe(r.title) || "(untitled)";
+                const ok = confirmDanger(`Delete backlog song?\n\n${safe(r.artist)} • ${title}\n\nThis cannot be undone.`);
+                if (!ok) return;
+
+                try {
+                  setUiStatus("warn", "Deleting…");
+                  await deleteById(sb, "songs", id);
+                  await refreshData();
+                  render();
+                  setUiStatus("ok", "Deleted backlog song.");
+                } catch (e) {
+                  console.error(e);
+                  setUiStatus("err", "Delete failed: " + (e?.message || String(e)));
+                }
+              });
+              wrap.appendChild(btnDel);
+              return wrap;
+            }
+          }
         ];
 
         function applyFilters(rows) {
           const a = selArtist.value;
           const q = qSearch.value.trim().toLowerCase();
-          return rows.filter(r => {
-            if (a && safe(r.artist) !== a) return false;
-            if (!q) return true;
-            const hay = (safe(r.title) + " " + safe(r.notes_performance) + " " + safe(r.genre) + " " + safe(r.key_root)).toLowerCase();
-            return hay.includes(q);
-          }).map(r => ({ ...r, created_at: fmtDate(r.created_at) }));
+          return rows
+            .filter(r => {
+              if (a && safe(r.artist) !== a) return false;
+              if (!q) return true;
+              const hay = (
+                safe(r.title) + " " +
+                safe(r.notes_performance) + " " +
+                safe(r.genre) + " " +
+                safe(r.key_root)
+              ).toLowerCase();
+              return hay.includes(q);
+            })
+            .map(r => ({ ...r, created_at: fmtDate(r.created_at) }));
         }
 
         function redraw() {
@@ -315,7 +439,6 @@
     }
 
     function openAddSongModal() {
-      // Minimal insert based on your songs columns.
       const fArtist = el("input", { class: "cc-input", placeholder: "Artist (Ivory Ocean / Ivory Haven)" });
       const fTitle = el("input", { class: "cc-input", placeholder: "Title" });
       const fBpm = el("input", { class: "cc-input", placeholder: "BPM (optional)", inputmode: "numeric" });
@@ -349,12 +472,12 @@
         msg.innerHTML = "<span class='cc-warn'>Saving…</span>";
 
         try {
-          const { error } = await sb.from("songs").insert([payload]);
+          const { error } = await window.supabaseClient.from("songs").insert([payload]);
           if (error) throw error;
 
           msg.innerHTML = "<span class='cc-ok'>Saved.</span>";
-          await refreshData();
-          render();
+          // refresh and rerender
+          await window.initTrackerUI({ rootId: "appRoot" });
         } catch (e) {
           console.error(e);
           msg.innerHTML = "<span class='cc-err'>Save failed:</span> " + (e?.message || String(e));
@@ -368,7 +491,7 @@
         el("div", { class: "cc-note" }, [
           "This adds a song into your backlog (songs table). Then use ",
           el("strong", {}, ["Add from Backlog → Tracker"]),
-          " on the Tracker tab to schedule/activate it."
+          " on the Tracker tab to schedule it."
         ]),
         el("div", { class: "cc-toolbar" }, [btnSave]),
         msg
@@ -378,7 +501,6 @@
     }
 
     function openPullToTrackerModal() {
-      // Choose a song from songs table and insert into music_tracker with mapped fields.
       const list = songsCache.slice();
 
       const sel = el("select", { class: "cc-select" }, [
@@ -426,12 +548,11 @@
         msg.innerHTML = "<span class='cc-warn'>Adding…</span>";
 
         try {
-          const { error } = await sb.from("music_tracker").insert([payload]);
+          const { error } = await window.supabaseClient.from("music_tracker").insert([payload]);
           if (error) throw error;
 
           msg.innerHTML = "<span class='cc-ok'>Added to tracker.</span>";
-          await refreshData();
-          render();
+          await window.initTrackerUI({ rootId: "appRoot" });
         } catch (e) {
           console.error(e);
           msg.innerHTML = "<span class='cc-err'>Add failed:</span> " + (e?.message || String(e));
@@ -445,7 +566,7 @@
         el("div", { class: "cc-note" }, [
           "This creates a row in ",
           el("code", {}, ["music_tracker"]),
-          " using the selected backlog song’s title/artist/BPM/genre, plus any fields you fill in here."
+          " using the selected backlog song’s title/artist/BPM/genre."
         ]),
         el("div", { class: "cc-toolbar" }, [btnAdd]),
         msg
@@ -454,11 +575,9 @@
       showModal("Add from Backlog → Tracker", body);
     }
 
-    // Wire tabs
     tabTracker.addEventListener("click", () => { mode = "tracker"; render(); });
     tabBacklog.addEventListener("click", () => { mode = "backlog"; render(); });
 
-    // initial load
     await refreshData();
     render();
   };
