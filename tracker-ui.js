@@ -112,14 +112,17 @@
     return { close: () => btnX.click() };
   }
 
-  async function loadSongs(sb) {
-    const { data, error } = await sb
-      .from("songs")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) throw error;
-    return data || [];
-  }
+ async function loadSongs(sb) {
+  // Only show backlog songs (unscheduled)
+  const { data, error } = await sb
+    .from("songs")
+    .select("*")
+    .or("stage.is.null,stage.eq.backlog")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
 
   // ===== NEW: tracker loader supports views + fallback =====
   async function loadTrackerByView(sb, viewName) {
