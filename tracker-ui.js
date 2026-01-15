@@ -123,12 +123,15 @@
 
   // ===== NEW: tracker loader supports views + fallback =====
   async function loadTrackerByView(sb, viewName) {
-    const { data, error } = await sb
-      .from(viewName)
-      .select("*");
-    if (error) throw error;
-    return data || [];
-  }
+  const { data, error } = await sb
+    .from(viewName)
+    .select("*")
+    .order("release_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
 
   async function loadTrackerFallback(sb) {
     const { data, error } = await sb
