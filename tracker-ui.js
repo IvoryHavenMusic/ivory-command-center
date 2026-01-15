@@ -1,12 +1,12 @@
 // tracker-ui.js (classic script; attaches window.initTrackerUI)
-// Renders:
-// - Tracker (music_tracker table)
-// - Backlog (songs table)
-// - Add new song (insert into songs)
-// - Pull song from backlog into tracker (insert into music_tracker)
-// NEW:
-// - Delete rows from music_tracker and songs
-// - Bulk delete tracker rows after a chosen date
+// Adds:
+// - Per-row Edit / Save / Cancel (Tracker + Backlog)
+// - Per-row Delete (kept)
+// - Bulk delete tracker rows FROM date onward (inclusive), with preview count
+// - Safer handling for "rows not deleted" surprises (e.g., null release_date)
+//
+// NOTE: For true “enterprise” normalization (separate notes table, enums, etc.),
+// we’ll do that later. This keeps your current schema and upgrades UX now.
 
 (function () {
   function el(tag, attrs = {}, children = []) {
@@ -15,7 +15,7 @@
       if (k === "class") node.className = v;
       else if (k === "html") node.innerHTML = v;
       else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2), v);
-      else node.setAttribute(k, v);
+      else if (v != null) node.setAttribute(k, v);
     }
     for (const c of children) {
       if (c == null) continue;
@@ -44,7 +44,8 @@
     const css = `
       .cc-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0;}
       .cc-chip{border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);padding:8px 10px;border-radius:999px;font-size:12px;color:rgba(255,255,255,0.78)}
-      .cc-input,.cc-select{border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.25);color:rgba(255,255,255,0.92);padding:10px 12px;border-radius:12px;font-size:13px;min-width:160px}
+      .cc-input,.cc-select,.cc-textarea{border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.25);color:rgba(255,255,255,0.92);padding:10px 12px;border-radius:12px;font-size:13px;min-width:160px}
+      .cc-textarea{min-width:220px;min-height:38px;resize:vertical}
       .cc-btn{appearance:none;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.92);padding:10px 12px;border-radius:12px;font-weight:700;cursor:pointer}
       .cc-btn:hover{background:rgba(255,255,255,0.18)}
       .cc-btn:disabled{opacity:.55;cursor:not-allowed}
@@ -63,13 +64,16 @@
       .cc-tab{border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);padding:8px 10px;border-radius:12px;font-size:12px;cursor:pointer;color:rgba(255,255,255,0.82)}
       .cc-tab.active{background:rgba(64,214,127,0.12);border-color:rgba(64,214,127,0.35)}
       .cc-modalBack{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:14px;z-index:9999}
-      .cc-modal{max-width:720px;width:100%;border:1px solid rgba(255,255,255,0.14);border-radius:16px;background:rgba(12,16,22,0.96);box-shadow:0 20px 80px rgba(0,0,0,0.6);padding:14px}
+      .cc-modal{max-width:780px;width:100%;border:1px solid rgba(255,255,255,0.14);border-radius:16px;background:rgba(12,16,22,0.96);box-shadow:0 20px 80px rgba(0,0,0,0.6);padding:14px}
       .cc-modalHeader{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
       .cc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
       @media (max-width:740px){.cc-grid{grid-template-columns:1fr}}
       .cc-note{font-size:12px;color:rgba(255,255,255,0.65);line-height:1.35;margin-top:6px}
       .cc-mini{font-size:11px;color:rgba(255,255,255,0.72)}
       .cc-actions{display:flex;gap:8px;flex-wrap:wrap}
+      .cc-rowEdit{background:rgba(64,214,127,0.06)}
+      .cc-inlineField{min-width:140px}
+      .cc-inlineTiny{min-width:110px}
     `;
     const style = document.createElement("style");
     style.id = "trackerUiStyles";
@@ -127,23 +131,65 @@
     return Array.from(new Set(arr.filter(Boolean)));
   }
 
-  // --- Delete helpers ---
+  function confirmDanger(text) {
+    return window.confirm(text);
+  }
+
+  // --- Delete / Update helpers ---
   async function deleteById(sb, table, id) {
     const { error } = await sb.from(table).delete().eq("id", id);
     if (error) throw error;
   }
 
-  async function deleteTrackerAfterDate(sb, dateStr) {
-    // dateStr: YYYY-MM-DD
-    const { error } = await sb
-      .from("music_tracker")
-      .delete()
-      .gt("release_date", dateStr);
+  async function updateById(sb, table, id, patch) {
+    const { error } = await sb.from(table).update(patch).eq("id", id);
     if (error) throw error;
   }
 
-  // buildTable now supports "render" columns for custom cell nodes
-  function buildTable(columns, rows) {
+  async function countTrackerFromDate(sb, dateStr, includeNulls) {
+    // inclusive: release_date >= dateStr
+    let q = sb
+      .from("music_tracker")
+      .select("id", { count: "exact", head: true });
+
+    // For date comparisons, Supabase date column should accept YYYY-MM-DD safely.
+    q = q.gte("release_date", dateStr);
+
+    const { count, error } = await q;
+    if (error) throw error;
+
+    if (!includeNulls) return count || 0;
+
+    // Null release_date rows are not matched by gte, so optionally include them too.
+    // (This helps when you have tracker rows created without a release date.)
+    const { count: nullCount, error: e2 } = await sb
+      .from("music_tracker")
+      .select("id", { count: "exact", head: true })
+      .is("release_date", null);
+
+    if (e2) throw e2;
+    return (count || 0) + (nullCount || 0);
+  }
+
+  async function bulkDeleteTrackerFromDate(sb, dateStr, includeNulls) {
+    // inclusive: delete release_date >= dateStr
+    const { error } = await sb
+      .from("music_tracker")
+      .delete()
+      .gte("release_date", dateStr);
+    if (error) throw error;
+
+    if (includeNulls) {
+      const { error: e2 } = await sb
+        .from("music_tracker")
+        .delete()
+        .is("release_date", null);
+      if (e2) throw e2;
+    }
+  }
+
+  // buildTable supports render columns for custom cell nodes
+  function buildTable(columns, rows, rowClassFn) {
     const thead = el("thead", {}, [
       el("tr", {}, columns.map(c => el("th", {}, [c.label])))
     ]);
@@ -159,13 +205,95 @@
           if (typeof c.render === "function") return el("td", {}, [c.render(r)]);
           return el("td", {}, [safe(r[c.key])]);
         });
-        tbody.appendChild(el("tr", {}, tds));
+        const tr = el("tr", {}, tds);
+        if (typeof rowClassFn === "function") {
+          const cls = rowClassFn(r);
+          if (cls) tr.classList.add(cls);
+        }
+        tbody.appendChild(tr);
       }
     }
 
     return el("div", { class: "cc-tableWrap" }, [
       el("table", { class: "cc-table" }, [thead, tbody])
     ]);
+  }
+
+  // ---- Dropdown dictionaries (lightweight, no schema change) ----
+  const ARTISTS = ["Ivory Ocean", "Ivory Haven"];
+
+  const TRACKER_CATEGORIES = [
+    "", "Single", "EP", "Album", "Video", "Promo", "Remaster", "Other"
+  ];
+
+  const STREAMING_STATUS = [
+    "", "Idea", "Demo", "Writing", "Recording", "Mixing", "Mastering", "Scheduled", "Released", "On Hold"
+  ];
+
+  const VIDEO_STATUS = [
+    "", "None", "Planned", "In Progress", "Editing", "Scheduled", "Released"
+  ];
+
+  const YES_NO = ["", "Yes", "No"];
+
+  const GENRES_PRIMARY = [
+    "",
+    "Tropical House",
+    "Progressive House",
+    "Future House",
+    "Afrobeat / Tropical",
+    "Tropical Fusion",
+    "Pop",
+    "Ballad",
+    "80s / Retro",
+    "Other"
+  ];
+
+  const FUSION_WITH = [
+    "",
+    "Reggaeton / Latin",
+    "Caribbean / Dancehall",
+    "Cuban",
+    "Brazilian",
+    "Afrobeat",
+    "R&B / Soul",
+    "Other"
+  ];
+
+  function makeSelect(options, value, className) {
+    const sel = el("select", { class: className || "cc-select" }, [
+      ...options.map(o => el("option", { value: o }, [o || "—"]))
+    ]);
+    sel.value = value == null ? "" : String(value);
+    return sel;
+  }
+
+  function makeInput(value, placeholder, className) {
+    const inp = el("input", { class: className || "cc-input", placeholder: placeholder || "" });
+    inp.value = value == null ? "" : String(value);
+    return inp;
+  }
+
+  function makeDateInput(value, className) {
+    const inp = el("input", { class: className || "cc-input", type: "date" });
+    inp.value = fmtDate(value);
+    return inp;
+  }
+
+  function makeTextarea(value, placeholder, className) {
+    const ta = el("textarea", { class: className || "cc-textarea", placeholder: placeholder || "" });
+    ta.value = value == null ? "" : String(value);
+    return ta;
+  }
+
+  function cleanPatch(patch) {
+    // Convert empty strings to null for nicer DB consistency on optional fields.
+    const out = {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === "") out[k] = null;
+      else out[k] = v;
+    }
+    return out;
   }
 
   window.initTrackerUI = async function initTrackerUI({ rootId = "appRoot" } = {}) {
@@ -196,6 +324,10 @@
     let songsCache = [];
     let trackerCache = [];
 
+    // Editing state
+    let editing = { table: null, id: null }; // {table:"music_tracker"|"songs", id:number}
+    let draft = {}; // key -> value map for the row being edited
+
     function setUiStatus(kind, msg) {
       const cls =
         kind === "ok" ? "cc-ok" :
@@ -220,8 +352,19 @@
       }
     }
 
-    function confirmDanger(text) {
-      return window.confirm(text);
+    function resetEdit() {
+      editing = { table: null, id: null };
+      draft = {};
+    }
+
+    function beginEdit(table, row) {
+      editing = { table, id: row.id };
+      // Copy current values into draft
+      draft = { ...row };
+    }
+
+    function isEditingRow(table, row) {
+      return editing.table === table && editing.id != null && String(editing.id) === String(row.id);
     }
 
     function render() {
@@ -231,6 +374,7 @@
 
       const btnRefresh = el("button", { class: "cc-btn", type: "button" }, ["Refresh"]);
       btnRefresh.addEventListener("click", async () => {
+        resetEdit();
         await refreshData();
         render();
       });
@@ -252,6 +396,7 @@
       toolbar.appendChild(qSearch);
       toolbar.appendChild(btnRefresh);
 
+      // --- Tracker view ---
       if (mode === "tracker") {
         const btnPull = el("button", { class: "cc-btn", type: "button" }, ["Add from Backlog → Tracker"]);
         const btnNewSong = el("button", { class: "cc-btn", type: "button" }, ["Add New Song (Backlog)"]);
@@ -260,24 +405,53 @@
         toolbar.appendChild(btnPull);
         toolbar.appendChild(btnNewSong);
 
-        // Bulk delete after date (super useful for your Jan 23 cleanup)
+        // Bulk delete FROM date onward (inclusive), with preview
         const bulkDate = el("input", { class: "cc-input", type: "date" });
-        const btnBulkDelete = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete tracker rows after date"]);
+        const chkNulls = el("input", { type: "checkbox" });
+        const lblNulls = el("label", { class: "cc-mini" }, [
+          chkNulls, " Also delete rows with no release date"
+        ]);
+        lblNulls.style.display = "flex";
+        lblNulls.style.gap = "8px";
+        lblNulls.style.alignItems = "center";
+
+        const btnPreview = el("button", { class: "cc-btn", type: "button" }, ["Preview delete count"]);
+        const btnBulkDelete = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete tracker rows from date onward"]);
+
+        btnPreview.addEventListener("click", async () => {
+          const d = bulkDate.value;
+          if (!d) { setUiStatus("err", "Pick a date first for bulk delete preview."); return; }
+          try {
+            setUiStatus("warn", "Calculating…");
+            const n = await countTrackerFromDate(sb, d, chkNulls.checked);
+            setUiStatus("ok", `Bulk delete preview: ${n} tracker rows would be deleted from ${d} onward${chkNulls.checked ? " (including null dates)" : ""}.`);
+          } catch (e) {
+            console.error(e);
+            setUiStatus("err", "Preview failed: " + (e?.message || String(e)));
+          }
+        });
+
         btnBulkDelete.addEventListener("click", async () => {
           const d = bulkDate.value;
-          if (!d) {
-            setUiStatus("err", "Pick a date first for bulk delete.");
-            return;
-          }
-          const ok = confirmDanger(`Delete ALL music_tracker rows with release_date after ${d}?\n\nThis cannot be undone.`);
-          if (!ok) return;
+          if (!d) { setUiStatus("err", "Pick a date first for bulk delete."); return; }
 
           try {
+            setUiStatus("warn", "Calculating delete count…");
+            const n = await countTrackerFromDate(sb, d, chkNulls.checked);
+
+            const ok = confirmDanger(
+              `Delete ${n} tracker row(s) FROM ${d} onward (inclusive)?\n\n` +
+              `This cannot be undone.\n` +
+              (chkNulls.checked ? `\nAlso includes rows with no release date.` : "")
+            );
+            if (!ok) return;
+
+            resetEdit();
             setUiStatus("warn", "Bulk deleting…");
-            await deleteTrackerAfterDate(sb, d);
+            await bulkDeleteTrackerFromDate(sb, d, chkNulls.checked);
             await refreshData();
             render();
-            setUiStatus("ok", `Deleted tracker rows after ${d}.`);
+            setUiStatus("ok", `Deleted ${n} tracker row(s) from ${d} onward.`);
           } catch (e) {
             console.error(e);
             setUiStatus("err", "Bulk delete failed: " + (e?.message || String(e)));
@@ -286,54 +460,9 @@
 
         toolbar.appendChild(el("span", { class: "cc-chip" }, ["Bulk cleanup"]));
         toolbar.appendChild(bulkDate);
+        toolbar.appendChild(lblNulls);
+        toolbar.appendChild(btnPreview);
         toolbar.appendChild(btnBulkDelete);
-
-        const cols = [
-          { key: "release_date", label: "Release date" },
-          { key: "artist", label: "Artist" },
-          { key: "song_title", label: "Song title" },
-          { key: "category", label: "Category" },
-          { key: "genre", label: "Genre" },
-          { key: "version", label: "Version" },
-          { key: "bpm", label: "BPM" },
-          { key: "streaming_status", label: "Streaming" },
-          { key: "video_status", label: "Video" },
-          { key: "demo_preference", label: "Demo pref" },
-          { key: "pitch_by", label: "Pitch by" },
-          { key: "remaster_needed", label: "Remaster?" },
-          { key: "notes", label: "Notes" },
-          {
-            label: "Actions",
-            render: (r) => {
-              const wrap = el("div", { class: "cc-actions" }, []);
-              const btnDel = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete"]);
-              btnDel.addEventListener("click", async () => {
-                const id = r.id;
-                if (id == null) {
-                  setUiStatus("err", "Cannot delete: row has no id.");
-                  return;
-                }
-                const title = safe(r.song_title) || "(untitled)";
-                const date = fmtDate(r.release_date) || "(no date)";
-                const ok = confirmDanger(`Delete tracker row?\n\n${date} • ${safe(r.artist)} • ${title}\n\nThis cannot be undone.`);
-                if (!ok) return;
-
-                try {
-                  setUiStatus("warn", "Deleting…");
-                  await deleteById(sb, "music_tracker", id);
-                  await refreshData();
-                  render();
-                  setUiStatus("ok", "Deleted tracker row.");
-                } catch (e) {
-                  console.error(e);
-                  setUiStatus("err", "Delete failed: " + (e?.message || String(e)));
-                }
-              });
-              wrap.appendChild(btnDel);
-              return wrap;
-            }
-          }
-        ];
 
         function applyFilters(rows) {
           const a = selArtist.value;
@@ -354,60 +483,282 @@
             .map(r => ({ ...r, release_date: fmtDate(r.release_date) }));
         }
 
+        function trackerCell(r, key, node) {
+          // helper: binds node -> draft changes
+          if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r[key])]);
+
+          // bind
+          const commit = () => { draft[key] = node.value; };
+          node.addEventListener("input", commit);
+          node.addEventListener("change", commit);
+          // initialize
+          node.value = safe(draft[key]);
+          return node;
+        }
+
+        function trackerGenreEditor(r) {
+          if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.genre)]);
+
+          // parse a previous “Tropical Fusion (Reggaeton / Latin)” style string
+          const current = safe(draft.genre);
+          let primary = current;
+          let fusion = "";
+
+          const m = current.match(/^(.+?)\s*\((.+)\)\s*$/);
+          if (m) { primary = m[1]; fusion = m[2]; }
+
+          const selPrimary = makeSelect(GENRES_PRIMARY, primary, "cc-select cc-inlineField");
+          const selFusion = makeSelect(FUSION_WITH, fusion, "cc-select cc-inlineField");
+
+          const wrap = el("div", { class: "cc-actions" }, [selPrimary, selFusion]);
+
+          function updateGenre() {
+            const p = selPrimary.value;
+            const f = selFusion.value;
+            const combined = (p === "Tropical Fusion" && f) ? `Tropical Fusion (${f})` : p;
+            draft.genre = combined;
+          }
+          selPrimary.addEventListener("change", updateGenre);
+          selFusion.addEventListener("change", updateGenre);
+          updateGenre();
+
+          // If primary isn’t Tropical Fusion, hide fusion selector
+          const syncVis = () => {
+            selFusion.style.display = (selPrimary.value === "Tropical Fusion") ? "" : "none";
+          };
+          selPrimary.addEventListener("change", syncVis);
+          syncVis();
+
+          return wrap;
+        }
+
+        const cols = [
+          {
+            key: "release_date",
+            label: "Release date",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [fmtDate(r.release_date)]);
+              const inp = makeDateInput(draft.release_date, "cc-input cc-inlineField");
+              inp.addEventListener("change", () => { draft.release_date = inp.value || null; });
+              return inp;
+            }
+          },
+          {
+            key: "artist",
+            label: "Artist",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.artist)]);
+              const sel = makeSelect(ARTISTS, draft.artist, "cc-select cc-inlineField");
+              sel.addEventListener("change", () => { draft.artist = sel.value; });
+              return sel;
+            }
+          },
+          {
+            key: "song_title",
+            label: "Song title",
+            render: (r) => trackerCell(r, "song_title", makeInput(draft.song_title, "Title", "cc-input cc-inlineField"))
+          },
+          {
+            key: "category",
+            label: "Category",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.category)]);
+              const sel = makeSelect(TRACKER_CATEGORIES, draft.category, "cc-select cc-inlineField");
+              sel.addEventListener("change", () => { draft.category = sel.value; });
+              return sel;
+            }
+          },
+          { label: "Genre", render: (r) => trackerGenreEditor(r) },
+          {
+            key: "version",
+            label: "Version",
+            render: (r) => trackerCell(r, "version", makeInput(draft.version, "v#", "cc-input cc-inlineTiny"))
+          },
+          {
+            key: "bpm",
+            label: "BPM",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.bpm)]);
+              const inp = makeInput(draft.bpm, "BPM", "cc-input cc-inlineTiny");
+              inp.inputMode = "numeric";
+              inp.addEventListener("input", () => {
+                const v = inp.value.trim();
+                draft.bpm = v ? Number(v) : null;
+              });
+              return inp;
+            }
+          },
+          {
+            key: "streaming_status",
+            label: "Streaming",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.streaming_status)]);
+              const sel = makeSelect(STREAMING_STATUS, draft.streaming_status, "cc-select cc-inlineField");
+              sel.addEventListener("change", () => { draft.streaming_status = sel.value; });
+              return sel;
+            }
+          },
+          {
+            key: "video_status",
+            label: "Video",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.video_status)]);
+              const sel = makeSelect(VIDEO_STATUS, draft.video_status, "cc-select cc-inlineField");
+              sel.addEventListener("change", () => { draft.video_status = sel.value; });
+              return sel;
+            }
+          },
+          {
+            key: "demo_preference",
+            label: "Demo pref",
+            render: (r) => trackerCell(r, "demo_preference", makeInput(draft.demo_preference, "", "cc-input cc-inlineField"))
+          },
+          {
+            key: "pitch_by",
+            label: "Pitch by",
+            render: (r) => trackerCell(r, "pitch_by", makeInput(draft.pitch_by, "", "cc-input cc-inlineField"))
+          },
+          {
+            key: "remaster_needed",
+            label: "Remaster?",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.remaster_needed)]);
+              const sel = makeSelect(YES_NO, safe(draft.remaster_needed), "cc-select cc-inlineTiny");
+              sel.addEventListener("change", () => { draft.remaster_needed = sel.value; });
+              return sel;
+            }
+          },
+          {
+            key: "notes",
+            label: "Notes",
+            render: (r) => {
+              if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.notes)]);
+              const ta = makeTextarea(draft.notes, "Notes…", "cc-textarea");
+              ta.addEventListener("input", () => { draft.notes = ta.value; });
+              return ta;
+            }
+          },
+          {
+            label: "Actions",
+            render: (r) => {
+              const wrap = el("div", { class: "cc-actions" }, []);
+
+              const isEdit = isEditingRow("music_tracker", r);
+
+              const btnEdit = el("button", { class: "cc-btn", type: "button" }, [isEdit ? "Editing…" : "Edit"]);
+              btnEdit.disabled = isEdit;
+              btnEdit.addEventListener("click", () => {
+                beginEdit("music_tracker", r);
+                render();
+              });
+
+              const btnSave = el("button", { class: "cc-btn", type: "button" }, ["Save"]);
+              btnSave.disabled = !isEdit;
+              btnSave.addEventListener("click", async () => {
+                if (!isEdit) return;
+
+                const id = r.id;
+                if (id == null) { setUiStatus("err", "Cannot save: row has no id."); return; }
+
+                // Minimal validation
+                const title = safe(draft.song_title).trim();
+                const artist = safe(draft.artist).trim();
+                if (!artist || !title) { setUiStatus("err", "Artist and Song title are required."); return; }
+
+                // Build patch with only editable fields
+                const patch = cleanPatch({
+                  release_date: draft.release_date || null,
+                  artist: artist,
+                  song_title: title,
+                  category: safe(draft.category),
+                  genre: safe(draft.genre),
+                  version: safe(draft.version),
+                  bpm: (draft.bpm === "" ? null : draft.bpm),
+                  streaming_status: safe(draft.streaming_status),
+                  video_status: safe(draft.video_status),
+                  demo_preference: safe(draft.demo_preference),
+                  pitch_by: safe(draft.pitch_by),
+                  remaster_needed: safe(draft.remaster_needed),
+                  notes: safe(draft.notes)
+                });
+
+                try {
+                  setUiStatus("warn", "Saving changes…");
+                  await updateById(sb, "music_tracker", id, patch);
+                  resetEdit();
+                  await refreshData();
+                  render();
+                  setUiStatus("ok", "Saved tracker row.");
+                } catch (e) {
+                  console.error(e);
+                  setUiStatus("err", "Save failed: " + (e?.message || String(e)));
+                }
+              });
+
+              const btnCancel = el("button", { class: "cc-btn", type: "button" }, ["Cancel"]);
+              btnCancel.disabled = !isEdit;
+              btnCancel.addEventListener("click", () => {
+                resetEdit();
+                render();
+                setUiStatus("ok", "Edit cancelled.");
+              });
+
+              const btnDel = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete"]);
+              btnDel.addEventListener("click", async () => {
+                if (isEdit) {
+                  const ok = confirmDanger("You’re editing this row. Cancel edit and delete anyway?");
+                  if (!ok) return;
+                }
+                const id = r.id;
+                if (id == null) { setUiStatus("err", "Cannot delete: row has no id."); return; }
+
+                const title = safe(r.song_title) || "(untitled)";
+                const date = fmtDate(r.release_date) || "(no date)";
+                const ok = confirmDanger(`Delete tracker row?\n\n${date} • ${safe(r.artist)} • ${title}\n\nThis cannot be undone.`);
+                if (!ok) return;
+
+                try {
+                  setUiStatus("warn", "Deleting…");
+                  resetEdit();
+                  await deleteById(sb, "music_tracker", id);
+                  await refreshData();
+                  render();
+                  setUiStatus("ok", "Deleted tracker row.");
+                } catch (e) {
+                  console.error(e);
+                  setUiStatus("err", "Delete failed: " + (e?.message || String(e)));
+                }
+              });
+
+              wrap.appendChild(btnEdit);
+              wrap.appendChild(btnSave);
+              wrap.appendChild(btnCancel);
+              wrap.appendChild(btnDel);
+              return wrap;
+            }
+          }
+        ];
+
         function redraw() {
           const rows = applyFilters(trackerCache);
-          content.appendChild(buildTable(cols, rows));
+          content.appendChild(
+            buildTable(
+              cols,
+              rows,
+              (r) => (isEditingRow("music_tracker", r) ? "cc-rowEdit" : "")
+            )
+          );
         }
 
         selArtist.addEventListener("change", redraw);
         qSearch.addEventListener("input", redraw);
         redraw();
 
+      // --- Backlog view ---
       } else {
         const btnNewSong = el("button", { class: "cc-btn", type: "button" }, ["Add New Song"]);
         btnNewSong.addEventListener("click", () => openAddSongModal());
         toolbar.appendChild(btnNewSong);
-
-        const cols = [
-          { key: "created_at", label: "Created" },
-          { key: "artist", label: "Artist" },
-          { key: "title", label: "Title" },
-          { key: "bpm", label: "BPM" },
-          { key: "key_root", label: "Key root" },
-          { key: "mode", label: "Mode" },
-          { key: "genre", label: "Genre" },
-          { key: "notes_performance", label: "Notes" },
-          {
-            label: "Actions",
-            render: (r) => {
-              const wrap = el("div", { class: "cc-actions" }, []);
-              const btnDel = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete"]);
-              btnDel.addEventListener("click", async () => {
-                const id = r.id;
-                if (id == null) {
-                  setUiStatus("err", "Cannot delete: row has no id.");
-                  return;
-                }
-                const title = safe(r.title) || "(untitled)";
-                const ok = confirmDanger(`Delete backlog song?\n\n${safe(r.artist)} • ${title}\n\nThis cannot be undone.`);
-                if (!ok) return;
-
-                try {
-                  setUiStatus("warn", "Deleting…");
-                  await deleteById(sb, "songs", id);
-                  await refreshData();
-                  render();
-                  setUiStatus("ok", "Deleted backlog song.");
-                } catch (e) {
-                  console.error(e);
-                  setUiStatus("err", "Delete failed: " + (e?.message || String(e)));
-                }
-              });
-              wrap.appendChild(btnDel);
-              return wrap;
-            }
-          }
-        ];
 
         function applyFilters(rows) {
           const a = selArtist.value;
@@ -427,9 +778,165 @@
             .map(r => ({ ...r, created_at: fmtDate(r.created_at) }));
         }
 
+        function backlogCell(r, key, node) {
+          if (!isEditingRow("songs", r)) return el("div", {}, [safe(r[key])]);
+          const commit = () => { draft[key] = node.value; };
+          node.addEventListener("input", commit);
+          node.addEventListener("change", commit);
+          node.value = safe(draft[key]);
+          return node;
+        }
+
+        const cols = [
+          { key: "created_at", label: "Created" },
+          {
+            label: "Artist",
+            render: (r) => {
+              if (!isEditingRow("songs", r)) return el("div", {}, [safe(r.artist)]);
+              const sel = makeSelect(ARTISTS, draft.artist, "cc-select cc-inlineField");
+              sel.addEventListener("change", () => { draft.artist = sel.value; });
+              return sel;
+            }
+          },
+          {
+            label: "Title",
+            render: (r) => backlogCell(r, "title", makeInput(draft.title, "Title", "cc-input cc-inlineField"))
+          },
+          {
+            label: "BPM",
+            render: (r) => {
+              if (!isEditingRow("songs", r)) return el("div", {}, [safe(r.bpm)]);
+              const inp = makeInput(draft.bpm, "BPM", "cc-input cc-inlineTiny");
+              inp.inputMode = "numeric";
+              inp.addEventListener("input", () => {
+                const v = inp.value.trim();
+                draft.bpm = v ? Number(v) : null;
+              });
+              return inp;
+            }
+          },
+          {
+            label: "Key root",
+            render: (r) => backlogCell(r, "key_root", makeInput(draft.key_root, "C#, F…", "cc-input cc-inlineTiny"))
+          },
+          {
+            label: "Mode",
+            render: (r) => backlogCell(r, "mode", makeInput(draft.mode, "major/minor", "cc-input cc-inlineTiny"))
+          },
+          {
+            label: "Genre",
+            render: (r) => backlogCell(r, "genre", makeInput(draft.genre, "Genre", "cc-input cc-inlineField"))
+          },
+          {
+            label: "Notes",
+            render: (r) => {
+              if (!isEditingRow("songs", r)) return el("div", {}, [safe(r.notes_performance)]);
+              const ta = makeTextarea(draft.notes_performance, "Notes…", "cc-textarea");
+              ta.addEventListener("input", () => { draft.notes_performance = ta.value; });
+              return ta;
+            }
+          },
+          {
+            label: "Actions",
+            render: (r) => {
+              const wrap = el("div", { class: "cc-actions" }, []);
+              const isEdit = isEditingRow("songs", r);
+
+              const btnEdit = el("button", { class: "cc-btn", type: "button" }, [isEdit ? "Editing…" : "Edit"]);
+              btnEdit.disabled = isEdit;
+              btnEdit.addEventListener("click", () => {
+                beginEdit("songs", r);
+                render();
+              });
+
+              const btnSave = el("button", { class: "cc-btn", type: "button" }, ["Save"]);
+              btnSave.disabled = !isEdit;
+              btnSave.addEventListener("click", async () => {
+                if (!isEdit) return;
+
+                const id = r.id;
+                if (id == null) { setUiStatus("err", "Cannot save: row has no id."); return; }
+
+                const artist = safe(draft.artist).trim();
+                const title = safe(draft.title).trim();
+                if (!artist || !title) { setUiStatus("err", "Artist and Title are required."); return; }
+
+                const patch = cleanPatch({
+                  artist,
+                  title,
+                  bpm: (draft.bpm === "" ? null : draft.bpm),
+                  key_root: safe(draft.key_root),
+                  mode: safe(draft.mode),
+                  genre: safe(draft.genre),
+                  notes_performance: safe(draft.notes_performance)
+                });
+
+                try {
+                  setUiStatus("warn", "Saving changes…");
+                  await updateById(sb, "songs", id, patch);
+                  resetEdit();
+                  await refreshData();
+                  render();
+                  setUiStatus("ok", "Saved backlog song.");
+                } catch (e) {
+                  console.error(e);
+                  setUiStatus("err", "Save failed: " + (e?.message || String(e)));
+                }
+              });
+
+              const btnCancel = el("button", { class: "cc-btn", type: "button" }, ["Cancel"]);
+              btnCancel.disabled = !isEdit;
+              btnCancel.addEventListener("click", () => {
+                resetEdit();
+                render();
+                setUiStatus("ok", "Edit cancelled.");
+              });
+
+              const btnDel = el("button", { class: "cc-btn cc-danger", type: "button" }, ["Delete"]);
+              btnDel.addEventListener("click", async () => {
+                if (isEdit) {
+                  const ok = confirmDanger("You’re editing this row. Cancel edit and delete anyway?");
+                  if (!ok) return;
+                }
+
+                const id = r.id;
+                if (id == null) { setUiStatus("err", "Cannot delete: row has no id."); return; }
+
+                const title = safe(r.title) || "(untitled)";
+                const ok = confirmDanger(`Delete backlog song?\n\n${safe(r.artist)} • ${title}\n\nThis cannot be undone.`);
+                if (!ok) return;
+
+                try {
+                  setUiStatus("warn", "Deleting…");
+                  resetEdit();
+                  await deleteById(sb, "songs", id);
+                  await refreshData();
+                  render();
+                  setUiStatus("ok", "Deleted backlog song.");
+                } catch (e) {
+                  console.error(e);
+                  setUiStatus("err", "Delete failed: " + (e?.message || String(e)));
+                }
+              });
+
+              wrap.appendChild(btnEdit);
+              wrap.appendChild(btnSave);
+              wrap.appendChild(btnCancel);
+              wrap.appendChild(btnDel);
+              return wrap;
+            }
+          }
+        ];
+
         function redraw() {
           const rows = applyFilters(songsCache);
-          content.appendChild(buildTable(cols, rows));
+          content.appendChild(
+            buildTable(
+              cols,
+              rows,
+              (r) => (isEditingRow("songs", r) ? "cc-rowEdit" : "")
+            )
+          );
         }
 
         selArtist.addEventListener("change", redraw);
@@ -438,14 +945,16 @@
       }
     }
 
+    // ----- Modals -----
     function openAddSongModal() {
-      const fArtist = el("input", { class: "cc-input", placeholder: "Artist (Ivory Ocean / Ivory Haven)" });
-      const fTitle = el("input", { class: "cc-input", placeholder: "Title" });
-      const fBpm = el("input", { class: "cc-input", placeholder: "BPM (optional)", inputmode: "numeric" });
-      const fKey = el("input", { class: "cc-input", placeholder: "Key root (optional) e.g. C#, F" });
-      const fMode = el("input", { class: "cc-input", placeholder: "Mode (optional) e.g. minor/major" });
-      const fGenre = el("input", { class: "cc-input", placeholder: "Genre (optional)" });
-      const fNotes = el("input", { class: "cc-input", placeholder: "Notes (optional)" });
+      const fArtist = makeSelect(ARTISTS, "", "cc-select");
+      const fTitle = makeInput("", "Title");
+      const fBpm = makeInput("", "BPM (optional)");
+      fBpm.inputMode = "numeric";
+      const fKey = makeInput("", "Key root (optional) e.g. C#, F");
+      const fMode = makeInput("", "Mode (optional) e.g. minor/major");
+      const fGenre = makeInput("", "Genre (optional)");
+      const fNotes = makeInput("", "Notes (optional)");
 
       const msg = el("div", { class: "cc-note", id: "addSongMsg" }, [""]);
 
@@ -476,8 +985,9 @@
           if (error) throw error;
 
           msg.innerHTML = "<span class='cc-ok'>Saved.</span>";
-          // refresh and rerender
-          await window.initTrackerUI({ rootId: "appRoot" });
+          resetEdit();
+          await refreshData();
+          render();
         } catch (e) {
           console.error(e);
           msg.innerHTML = "<span class='cc-err'>Save failed:</span> " + (e?.message || String(e));
@@ -509,11 +1019,11 @@
       ]);
 
       const fReleaseDate = el("input", { class: "cc-input", type: "date" });
-      const fCategory = el("input", { class: "cc-input", placeholder: "Category (optional)" });
-      const fVersion = el("input", { class: "cc-input", placeholder: "Version (optional) e.g. v6" });
-      const fStreaming = el("input", { class: "cc-input", placeholder: "Streaming status (optional)" });
-      const fVideo = el("input", { class: "cc-input", placeholder: "Video status (optional)" });
-      const fNotes = el("input", { class: "cc-input", placeholder: "Notes (optional)" });
+      const fCategory = makeSelect(TRACKER_CATEGORIES, "", "cc-select");
+      const fVersion = makeInput("", "Version (optional) e.g. v6");
+      const fStreaming = makeSelect(STREAMING_STATUS, "", "cc-select");
+      const fVideo = makeSelect(VIDEO_STATUS, "", "cc-select");
+      const fNotes = makeInput("", "Notes (optional)");
 
       const msg = el("div", { class: "cc-note" }, [""]);
 
@@ -539,10 +1049,10 @@
         };
 
         if (fReleaseDate.value) payload.release_date = fReleaseDate.value;
-        if (fCategory.value.trim()) payload.category = fCategory.value.trim();
+        if (fCategory.value) payload.category = fCategory.value;
         if (fVersion.value.trim()) payload.version = fVersion.value.trim();
-        if (fStreaming.value.trim()) payload.streaming_status = fStreaming.value.trim();
-        if (fVideo.value.trim()) payload.video_status = fVideo.value.trim();
+        if (fStreaming.value) payload.streaming_status = fStreaming.value;
+        if (fVideo.value) payload.video_status = fVideo.value;
         if (fNotes.value.trim()) payload.notes = fNotes.value.trim();
 
         msg.innerHTML = "<span class='cc-warn'>Adding…</span>";
@@ -552,7 +1062,9 @@
           if (error) throw error;
 
           msg.innerHTML = "<span class='cc-ok'>Added to tracker.</span>";
-          await window.initTrackerUI({ rootId: "appRoot" });
+          resetEdit();
+          await refreshData();
+          render();
         } catch (e) {
           console.error(e);
           msg.innerHTML = "<span class='cc-err'>Add failed:</span> " + (e?.message || String(e));
@@ -575,8 +1087,8 @@
       showModal("Add from Backlog → Tracker", body);
     }
 
-    tabTracker.addEventListener("click", () => { mode = "tracker"; render(); });
-    tabBacklog.addEventListener("click", () => { mode = "backlog"; render(); });
+    tabTracker.addEventListener("click", () => { resetEdit(); mode = "tracker"; render(); });
+    tabBacklog.addEventListener("click", () => { resetEdit(); mode = "backlog"; render(); });
 
     await refreshData();
     render();
