@@ -112,6 +112,17 @@
         tracker: "music_tracker"
       };
 
+      // Supabase views (must exist in DB)
+      // v_scheduled: status='scheduled'
+      // v_live:      status='live'
+      const VIEWS = {
+        scheduled: "v_scheduled",
+        live: "v_live"
+      };
+
+      // Status enum values we will enforce in UI dropdown
+      const STATUS_VALUES = ["scheduled", "live"];
+
       // ====== UI helpers ======
       function setStatus(html){ document.getElementById("statusBox").innerHTML = html; }
       function setAppStatus(html){ document.getElementById("appStatus").innerHTML = html; }
@@ -194,7 +205,9 @@
 
         setAppStatus("<span class='warn'>Loading tracker UI…</span>");
 
-        const uiSrc = prettyBase + "tracker-ui.js?v=20260114-1";
+        // bump this when you want to bust cache
+        const uiSrc = prettyBase + "tracker-ui.js?v=20260115-views-1";
+
         const s = document.createElement("script");
         s.src = uiSrc;
         s.onload = () => {
@@ -212,7 +225,10 @@
             window.initTrackerUI({
               rootId: "appRoot",
               supabase: supabaseClient,
-              tables: TABLES
+              tables: TABLES,
+              views: VIEWS,
+              statusValues: STATUS_VALUES,
+              setAppStatus
             });
             setAppStatus("<span class='ok'>Tracker UI initialized.</span>");
           }catch(e){
