@@ -1191,6 +1191,11 @@
             if (try2.error) throw try2.error;
           }
 
+          // After successfully adding to tracker, move the source song out of backlog
+          await window.supabaseClient
+            .from("songs")
+            .update({ stage: desired }) // desired is 'scheduled' or 'live'
+            .eq("id", Number(id));
           msg.innerHTML = "<span class='cc-ok'>Added to tracker.</span>";
           resetEdit();
           await refreshData();
