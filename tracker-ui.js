@@ -1,13 +1,15 @@
-alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS file.");
 // tracker-ui.js (classic script; attaches window.initTrackerUI)
-// Adds:
-// - Per-row Edit / Save / Cancel (Tracker + Backlog)
-// - Per-row Delete (kept)
-// - Bulk delete tracker rows FROM date onward (inclusive), with preview count
-// - Safer handling for "rows not deleted" surprises (e.g., null release_date)
 //
-// NOTE: For true “enterprise” normalization (separate notes table, enums, etc.),
-// we’ll do that later. This keeps your current schema and upgrades UX now.
+// KEEPING EVERYTHING YOU ALREADY HAVE, PLUS:
+// - Tracker sub-views: Scheduled (default) | Live
+// - Uses DB views if present: v_scheduled / v_live
+// - Falls back to table filter if views aren't ready yet
+// - Adds Status dropdown column (scheduled/live) that updates DB safely
+//
+// Notes on compatibility:
+// - Prefers column "status" (new model)
+// - If not present, falls back to "streaming" or "streaming_status" if those exist
+//   so nothing breaks during transition.
 
 (function () {
   function el(tag, attrs = {}, children = []) {
@@ -61,9 +63,10 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
       .cc-ok{color:#40d67f;font-weight:800}
       .cc-warn{color:#ffb020;font-weight:800}
       .cc-err{color:#ff5d5d;font-weight:800}
-      .cc-tabs{display:flex;gap:8px;margin-top:8px}
-      .cc-tab{border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);padding:8px 10px;border-radius:12px;font-size:12px;cursor:pointer;color:rgba(255,255,255,0.82)}
+      .cc-tabs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+      .cc-tab{border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);padding:8px 10px;border-radius:12px;font-size:12px;cursor:pointer;color:rgba(255,255,255,0.82);user-select:none}
       .cc-tab.active{background:rgba(64,214,127,0.12);border-color:rgba(64,214,127,0.35)}
+      .cc-tab.blue.active{background:rgba(0,153,255,0.12);border-color:rgba(0,153,255,0.35)}
       .cc-modalBack{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:14px;z-index:9999}
       .cc-modal{max-width:780px;width:100%;border:1px solid rgba(255,255,255,0.14);border-radius:16px;background:rgba(12,16,22,0.96);box-shadow:0 20px 80px rgba(0,0,0,0.6);padding:14px}
       .cc-modalHeader{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
@@ -118,7 +121,16 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
     return data || [];
   }
 
-  async function loadTracker(sb) {
+  // ===== NEW: tracker loader supports views + fallback =====
+  async function loadTrackerByView(sb, viewName) {
+    const { data, error } = await sb
+      .from(viewName)
+      .select("*");
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function loadTrackerFallback(sb) {
     const { data, error } = await sb
       .from("music_tracker")
       .select("*")
@@ -153,7 +165,6 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
       .from("music_tracker")
       .select("id", { count: "exact", head: true });
 
-    // For date comparisons, Supabase date column should accept YYYY-MM-DD safely.
     q = q.gte("release_date", dateStr);
 
     const { count, error } = await q;
@@ -161,8 +172,6 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
 
     if (!includeNulls) return count || 0;
 
-    // Null release_date rows are not matched by gte, so optionally include them too.
-    // (This helps when you have tracker rows created without a release date.)
     const { count: nullCount, error: e2 } = await sb
       .from("music_tracker")
       .select("id", { count: "exact", head: true })
@@ -173,7 +182,6 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
   }
 
   async function bulkDeleteTrackerFromDate(sb, dateStr, includeNulls) {
-    // inclusive: delete release_date >= dateStr
     const { error } = await sb
       .from("music_tracker")
       .delete()
@@ -227,6 +235,7 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
     "", "Single", "EP", "Album", "Video", "Promo", "Remaster", "Other"
   ];
 
+  // Existing workflow statuses (KEEPING THESE)
   const STREAMING_STATUS = [
     "", "Idea", "Demo", "Writing", "Recording", "Mixing", "Mastering", "Scheduled", "Released", "On Hold"
   ];
@@ -261,6 +270,9 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
     "Other"
   ];
 
+  // ===== NEW: Status enum (the clean "Scheduled vs Live" view driver) =====
+  const STATUS_VALUES = ["scheduled", "live"];
+
   function makeSelect(options, value, className) {
     const sel = el("select", { class: className || "cc-select" }, [
       ...options.map(o => el("option", { value: o }, [o || "—"]))
@@ -288,13 +300,44 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
   }
 
   function cleanPatch(patch) {
-    // Convert empty strings to null for nicer DB consistency on optional fields.
     const out = {};
     for (const [k, v] of Object.entries(patch)) {
       if (v === "") out[k] = null;
       else out[k] = v;
     }
     return out;
+  }
+
+  // ===== NEW: determine which column to use for "Scheduled/Live" status =====
+  function detectStatusColumn(sampleRow) {
+    if (!sampleRow) return null;
+    // Preferred new column
+    if ("status" in sampleRow) return "status";
+    // Transitional possibilities
+    if ("streaming" in sampleRow) return "streaming";
+    // Last-resort: if user had been using streaming_status to mean live/scheduled (not ideal, but safe)
+    if ("streaming_status" in sampleRow) return "streaming_status";
+    return null;
+  }
+
+  function normalizeStatusValue(v) {
+    const s = safe(v).trim().toLowerCase();
+    if (!s) return "";
+    if (s === "released") return "live";
+    if (s === "live") return "live";
+    if (s === "scheduled") return "scheduled";
+    return s;
+  }
+
+  function rowIsLive(row, statusCol) {
+    if (!statusCol) return false;
+    const v = normalizeStatusValue(row[statusCol]);
+    if (v === "live") return true;
+
+    // If we’re stuck using streaming_status (workflow), treat "Released" as live
+    if (statusCol === "streaming_status" && safe(row.streaming_status).toLowerCase() === "released") return true;
+
+    return false;
   }
 
   window.initTrackerUI = async function initTrackerUI({ rootId = "appRoot" } = {}) {
@@ -306,28 +349,38 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
     const sb = await requireSupabase();
 
     const statusLine = el("div", { class: "cc-note", id: "uiStatus" }, ["Loading…"]);
+
     const tabs = el("div", { class: "cc-tabs" }, []);
     const tabTracker = el("div", { class: "cc-tab active" }, ["Tracker"]);
     const tabBacklog = el("div", { class: "cc-tab" }, ["Backlog"]);
     tabs.appendChild(tabTracker);
     tabs.appendChild(tabBacklog);
 
+    // ===== NEW: Tracker sub-tabs =====
+    const trackerSubTabs = el("div", { class: "cc-tabs", style: "margin-top:10px" }, []);
+    const tabScheduled = el("div", { class: "cc-tab blue active" }, ["Scheduled"]);
+    const tabLive = el("div", { class: "cc-tab blue" }, ["Live"]);
+    trackerSubTabs.appendChild(tabScheduled);
+    trackerSubTabs.appendChild(tabLive);
+
     const toolbar = el("div", { class: "cc-toolbar" }, []);
     const content = el("div", { id: "uiContent" }, []);
 
     root.innerHTML = "";
     root.appendChild(tabs);
+    root.appendChild(trackerSubTabs); // visible only when mode === tracker
     root.appendChild(toolbar);
     root.appendChild(content);
     root.appendChild(statusLine);
 
     let mode = "tracker";
+    let trackerView = "scheduled"; // NEW: scheduled | live (default)
     let songsCache = [];
     let trackerCache = [];
 
     // Editing state
-    let editing = { table: null, id: null }; // {table:"music_tracker"|"songs", id:number}
-    let draft = {}; // key -> value map for the row being edited
+    let editing = { table: null, id: null };
+    let draft = {};
 
     function setUiStatus(kind, msg) {
       const cls =
@@ -340,13 +393,46 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
     function setActiveTab() {
       tabTracker.classList.toggle("active", mode === "tracker");
       tabBacklog.classList.toggle("active", mode === "backlog");
+      trackerSubTabs.style.display = (mode === "tracker") ? "" : "none";
+    }
+
+    function setActiveTrackerSubTab() {
+      tabScheduled.classList.toggle("active", trackerView === "scheduled");
+      tabLive.classList.toggle("active", trackerView === "live");
+    }
+
+    // ===== NEW: Load tracker using views if available =====
+    async function loadTrackerSmart() {
+      // Try views first. If they fail (missing view, permissions), fall back.
+      const viewName = (trackerView === "live") ? "v_live" : "v_scheduled";
+      try {
+        const data = await loadTrackerByView(sb, viewName);
+        return data;
+      } catch (e) {
+        // fallback to base table
+        const all = await loadTrackerFallback(sb);
+        // Filter client-side using whichever status column exists
+        const statusCol = detectStatusColumn(all[0]);
+        if (!statusCol) {
+          // If no status column exists yet, scheduled view becomes "everything" (safe)
+          return all;
+        }
+        if (trackerView === "live") {
+          return all.filter(r => rowIsLive(r, statusCol));
+        } else {
+          return all.filter(r => !rowIsLive(r, statusCol));
+        }
+      }
     }
 
     async function refreshData() {
       setUiStatus("warn", "Refreshing data…");
       try {
-        [songsCache, trackerCache] = await Promise.all([loadSongs(sb), loadTracker(sb)]);
-        setUiStatus("ok", `Loaded ${trackerCache.length} tracker rows and ${songsCache.length} songs.`);
+        const songsPromise = loadSongs(sb);
+        const trackerPromise = loadTrackerSmart();
+        [songsCache, trackerCache] = await Promise.all([songsPromise, trackerPromise]);
+
+        setUiStatus("ok", `Loaded ${trackerCache.length} tracker rows (${trackerView}) and ${songsCache.length} songs.`);
       } catch (e) {
         console.error(e);
         setUiStatus("err", "Load failed: " + (e?.message || String(e)));
@@ -360,7 +446,6 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
 
     function beginEdit(table, row) {
       editing = { table, id: row.id };
-      // Copy current values into draft
       draft = { ...row };
     }
 
@@ -372,6 +457,7 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
       toolbar.innerHTML = "";
       content.innerHTML = "";
       setActiveTab();
+      setActiveTrackerSubTab();
 
       const btnRefresh = el("button", { class: "cc-btn", type: "button" }, ["Refresh"]);
       btnRefresh.addEventListener("click", async () => {
@@ -392,7 +478,7 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
 
       const qSearch = el("input", { class: "cc-input", placeholder: "Search title / notes…" });
 
-      toolbar.appendChild(el("span", { class: "cc-chip" }, [mode === "tracker" ? "Tracker view" : "Backlog view"]));
+      toolbar.appendChild(el("span", { class: "cc-chip" }, [mode === "tracker" ? `Tracker (${trackerView})` : "Backlog view"]));
       toolbar.appendChild(selArtist);
       toolbar.appendChild(qSearch);
       toolbar.appendChild(btnRefresh);
@@ -407,6 +493,7 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
         toolbar.appendChild(btnNewSong);
 
         // Bulk delete FROM date onward (inclusive), with preview
+        // (Available in tracker mode; applies to music_tracker table)
         const bulkDate = el("input", { class: "cc-input", type: "date" });
         const chkNulls = el("input", { type: "checkbox" });
         const lblNulls = el("label", { class: "cc-mini" }, [
@@ -477,7 +564,9 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
                 safe(r.notes) + " " +
                 safe(r.genre) + " " +
                 safe(r.streaming_status) + " " +
-                safe(r.video_status)
+                safe(r.video_status) + " " +
+                safe(r.status) + " " +
+                safe(r.streaming)
               ).toLowerCase();
               return hay.includes(q);
             })
@@ -485,14 +574,10 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
         }
 
         function trackerCell(r, key, node) {
-          // helper: binds node -> draft changes
           if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r[key])]);
-
-          // bind
           const commit = () => { draft[key] = node.value; };
           node.addEventListener("input", commit);
           node.addEventListener("change", commit);
-          // initialize
           node.value = safe(draft[key]);
           return node;
         }
@@ -500,7 +585,6 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
         function trackerGenreEditor(r) {
           if (!isEditingRow("music_tracker", r)) return el("div", {}, [safe(r.genre)]);
 
-          // parse a previous “Tropical Fusion (Reggaeton / Latin)” style string
           const current = safe(draft.genre);
           let primary = current;
           let fusion = "";
@@ -523,7 +607,6 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
           selFusion.addEventListener("change", updateGenre);
           updateGenre();
 
-          // If primary isn’t Tropical Fusion, hide fusion selector
           const syncVis = () => {
             selFusion.style.display = (selPrimary.value === "Tropical Fusion") ? "" : "none";
           };
@@ -531,6 +614,24 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
           syncVis();
 
           return wrap;
+        }
+
+        // ===== NEW: Status editor (scheduled/live) =====
+        function statusEditor(r) {
+          const statusCol = detectStatusColumn(r);
+          const current = statusCol ? normalizeStatusValue(r[statusCol]) : "";
+          const displayVal = (current === "live" || current === "scheduled") ? current : "";
+
+          if (!isEditingRow("music_tracker", r)) {
+            return el("div", {}, [displayVal || ""]);
+          }
+
+          const sel = makeSelect(STATUS_VALUES, normalizeStatusValue(draft[statusCol] ?? displayVal), "cc-select cc-inlineTiny");
+          sel.addEventListener("change", () => {
+            const v = sel.value;
+            if (statusCol) draft[statusCol] = v;
+          });
+          return sel;
         }
 
         const cols = [
@@ -570,6 +671,10 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
             }
           },
           { label: "Genre", render: (r) => trackerGenreEditor(r) },
+
+          // ===== NEW COLUMN =====
+          { label: "Status", render: (r) => statusEditor(r) },
+
           {
             key: "version",
             label: "Version",
@@ -661,12 +766,12 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
                 const id = r.id;
                 if (id == null) { setUiStatus("err", "Cannot save: row has no id."); return; }
 
-                // Minimal validation
                 const title = safe(draft.song_title).trim();
                 const artist = safe(draft.artist).trim();
                 if (!artist || !title) { setUiStatus("err", "Artist and Song title are required."); return; }
 
-                // Build patch with only editable fields
+                const statusCol = detectStatusColumn(r);
+
                 const patch = cleanPatch({
                   release_date: draft.release_date || null,
                   artist: artist,
@@ -682,6 +787,12 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
                   remaster_needed: safe(draft.remaster_needed),
                   notes: safe(draft.notes)
                 });
+
+                // If statusCol exists, also persist scheduled/live
+                if (statusCol) {
+                  const v = normalizeStatusValue(draft[statusCol]);
+                  if (v === "scheduled" || v === "live") patch[statusCol] = v;
+                }
 
                 try {
                   setUiStatus("warn", "Saving changes…");
@@ -1026,6 +1137,9 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
       const fVideo = makeSelect(VIDEO_STATUS, "", "cc-select");
       const fNotes = makeInput("", "Notes (optional)");
 
+      // NEW: status default scheduled (if you have column)
+      const fStatus = makeSelect(STATUS_VALUES, "scheduled", "cc-select");
+
       const msg = el("div", { class: "cc-note" }, [""]);
 
       const btnAdd = el("button", { class: "cc-btn", type: "button" }, ["Add to Tracker"]);
@@ -1056,11 +1170,20 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
         if (fVideo.value) payload.video_status = fVideo.value;
         if (fNotes.value.trim()) payload.notes = fNotes.value.trim();
 
+        // set scheduled/live if the column exists in DB:
+        // We'll attempt "status" first; if it errors, we try "streaming"
+        const desired = fStatus.value;
+
         msg.innerHTML = "<span class='cc-warn'>Adding…</span>";
 
         try {
-          const { error } = await window.supabaseClient.from("music_tracker").insert([payload]);
-          if (error) throw error;
+          // Try insert with status
+          let { error } = await window.supabaseClient.from("music_tracker").insert([{ ...payload, status: desired }]);
+          if (error) {
+            // Try insert with streaming if status doesn't exist
+            const try2 = await window.supabaseClient.from("music_tracker").insert([{ ...payload, streaming: desired }]);
+            if (try2.error) throw try2.error;
+          }
 
           msg.innerHTML = "<span class='cc-ok'>Added to tracker.</span>";
           resetEdit();
@@ -1074,12 +1197,12 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
 
       const body = el("div", {}, [
         el("div", { class: "cc-grid" }, [
-          sel, fReleaseDate, fCategory, fVersion, fStreaming, fVideo, fNotes
+          sel, fReleaseDate, fCategory, fVersion, fStatus, fStreaming, fVideo, fNotes
         ]),
         el("div", { class: "cc-note" }, [
           "This creates a row in ",
           el("code", {}, ["music_tracker"]),
-          " using the selected backlog song’s title/artist/BPM/genre."
+          " using the selected backlog song’s title/artist/BPM/genre. Status defaults to scheduled."
         ]),
         el("div", { class: "cc-toolbar" }, [btnAdd]),
         msg
@@ -1088,8 +1211,39 @@ alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS fil
       showModal("Add from Backlog → Tracker", body);
     }
 
-    tabTracker.addEventListener("click", () => { resetEdit(); mode = "tracker"; render(); });
-    tabBacklog.addEventListener("click", () => { resetEdit(); mode = "backlog"; render(); });
+    // ===== Tab events =====
+    tabTracker.addEventListener("click", async () => {
+      resetEdit();
+      mode = "tracker";
+      await refreshData();
+      render();
+    });
+
+    tabBacklog.addEventListener("click", async () => {
+      resetEdit();
+      mode = "backlog";
+      await refreshData();
+      render();
+    });
+
+    // ===== NEW: Tracker sub-tab events =====
+    tabScheduled.addEventListener("click", async () => {
+      if (trackerView === "scheduled") return;
+      resetEdit();
+      trackerView = "scheduled";
+      setActiveTrackerSubTab();
+      await refreshData();
+      render();
+    });
+
+    tabLive.addEventListener("click", async () => {
+      if (trackerView === "live") return;
+      resetEdit();
+      trackerView = "live";
+      setActiveTrackerSubTab();
+      await refreshData();
+      render();
+    });
 
     await refreshData();
     render();
