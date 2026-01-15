@@ -1,3 +1,4 @@
+alert("TRACKER UI BUILD TEST: if you see this, the live site is loading THIS file.");
 // tracker-ui.js (classic script; attaches window.initTrackerUI)
 // Adds:
 // - Per-row Edit / Save / Cancel (Tracker + Backlog)
